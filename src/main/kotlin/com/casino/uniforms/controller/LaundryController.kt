@@ -15,6 +15,11 @@ class LaundryController(private val hamperService: HamperService) {
      */
     @PostMapping("/dropoff")
     fun dropoffLaundry(@RequestParam studioId: Long, @RequestParam itemCount: Int = 1): ResponseEntity<ApiResponse<Map<String, Any>>> {
+        // Validate itemCount
+        if (itemCount <= 0 || itemCount > 100) {
+            throw IllegalArgumentException("itemCount must be between 1 and 100")
+        }
+        
         val warnings = mutableListOf<String>()
         
         // Increment hamper for each item
@@ -40,6 +45,11 @@ class LaundryController(private val hamperService: HamperService) {
      */
     @PostMapping("/pickup")
     fun pickupLaundry(@RequestParam studioId: Long, @RequestParam itemCount: Int = 1): ResponseEntity<ApiResponse<Map<String, Any>>> {
+        // Validate itemCount
+        if (itemCount <= 0 || itemCount > 100) {
+            throw IllegalArgumentException("itemCount must be between 1 and 100")
+        }
+        
         // Decrement hamper for each item picked up
         repeat(itemCount) {
             hamperService.decrementHamper(studioId)

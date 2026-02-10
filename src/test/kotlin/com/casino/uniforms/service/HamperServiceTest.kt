@@ -36,7 +36,12 @@ class HamperServiceTest {
     fun `incrementHamper should return false when below capacity`() {
         // Given
         studio.setCurrentHamperCount(5)
-        `when`(studioRepository.findById(1L)).thenReturn(Optional.of(studio))
+        val updatedStudio = Studio()
+        updatedStudio.setCurrentHamperCount(6)
+        updatedStudio.setHamperCapacity(10)
+        `when`(studioRepository.findById(1L))
+            .thenReturn(Optional.of(studio))
+            .thenReturn(Optional.of(updatedStudio))
         `when`(studioRepository.incrementHamper(1L)).thenReturn(1)
 
         // When
@@ -51,7 +56,12 @@ class HamperServiceTest {
     fun `incrementHamper should return true when at capacity`() {
         // Given
         studio.setCurrentHamperCount(9)
-        `when`(studioRepository.findById(1L)).thenReturn(Optional.of(studio))
+        val updatedStudio = Studio()
+        updatedStudio.setCurrentHamperCount(10)
+        updatedStudio.setHamperCapacity(10)
+        `when`(studioRepository.findById(1L))
+            .thenReturn(Optional.of(studio))
+            .thenReturn(Optional.of(updatedStudio))
         `when`(studioRepository.incrementHamper(1L)).thenReturn(1)
 
         // When
@@ -66,7 +76,12 @@ class HamperServiceTest {
     fun `incrementHamper should return true when over capacity`() {
         // Given - already at capacity
         studio.setCurrentHamperCount(10)
-        `when`(studioRepository.findById(1L)).thenReturn(Optional.of(studio))
+        val updatedStudio = Studio()
+        updatedStudio.setCurrentHamperCount(11)
+        updatedStudio.setHamperCapacity(10)
+        `when`(studioRepository.findById(1L))
+            .thenReturn(Optional.of(studio))
+            .thenReturn(Optional.of(updatedStudio))
         `when`(studioRepository.incrementHamper(1L)).thenReturn(1)
 
         // When

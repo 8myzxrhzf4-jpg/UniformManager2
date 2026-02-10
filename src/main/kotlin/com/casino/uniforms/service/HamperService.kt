@@ -18,9 +18,13 @@ class HamperService(private val studioRepository: StudioRepository) {
             .orElseThrow { IllegalArgumentException("Studio not found with id: $studioId") }
         
         studioRepository.incrementHamper(studioId)
+        studioRepository.flush()  // Ensure the increment is flushed to the database
+        
+        // Re-read the studio to get the updated count
+        val updatedStudio = studioRepository.findById(studioId).orElseThrow()
         
         // Check if at or over capacity (use Java getters)
-        return studio.getCurrentHamperCount() + 1 >= studio.getHamperCapacity()
+        return updatedStudio.getCurrentHamperCount() >= studio.getHamperCapacity()
     }
 
     /**
