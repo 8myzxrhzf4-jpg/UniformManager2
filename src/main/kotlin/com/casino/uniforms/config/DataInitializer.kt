@@ -36,6 +36,8 @@ class DataInitializer {
             roleRepository.save(Role(name = "AUDITOR"))
         }
         
+        // Note: AUDITOR role is created for future use but not assigned to any default users
+        
         // Create default admin user if it doesn't exist
         if (!userRepository.findByUsername("admin").isPresent) {
             logger.info("Creating default admin user")
