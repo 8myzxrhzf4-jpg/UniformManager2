@@ -8,15 +8,25 @@ public class UniformItem {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    
+    @Column(nullable = false)
     private String name;
+    
     private String size;
-    @Column(unique = true)
+    
+    @Column(unique = true, nullable = false)
     private String barcode;
-    private String status;
-    private String category;
+    
+    @Column(nullable = false)
+    private String status = "In Stock";
+    
+    @Column(nullable = false)
+    private String category = "Other";
+    
     @ManyToOne
     @JoinColumn(name = "studio_id")
     private Studio studio;
+    
     private String studioLocation;
 
     // Getters and Setters
