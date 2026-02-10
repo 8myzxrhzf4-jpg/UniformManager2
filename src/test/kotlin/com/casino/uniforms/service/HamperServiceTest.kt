@@ -26,16 +26,16 @@ class HamperServiceTest {
     @BeforeEach
     fun setUp() {
         studio = Studio()
-        studio.id = 1L
-        studio.name = "Test Studio"
-        studio.hamperCapacity = 10
-        studio.currentHamperCount = 0
+        studio.setId(1L)
+        studio.setName("Test Studio")
+        studio.setHamperCapacity(10)
+        studio.setCurrentHamperCount(0)
     }
 
     @Test
     fun `incrementHamper should return false when below capacity`() {
         // Given
-        studio.currentHamperCount = 5
+        studio.setCurrentHamperCount(5)
         `when`(studioRepository.findById(1L)).thenReturn(Optional.of(studio))
         `when`(studioRepository.incrementHamper(1L)).thenReturn(1)
 
@@ -50,7 +50,7 @@ class HamperServiceTest {
     @Test
     fun `incrementHamper should return true when at capacity`() {
         // Given
-        studio.currentHamperCount = 9
+        studio.setCurrentHamperCount(9)
         `when`(studioRepository.findById(1L)).thenReturn(Optional.of(studio))
         `when`(studioRepository.incrementHamper(1L)).thenReturn(1)
 
@@ -65,7 +65,7 @@ class HamperServiceTest {
     @Test
     fun `incrementHamper should return true when over capacity`() {
         // Given - already at capacity
-        studio.currentHamperCount = 10
+        studio.setCurrentHamperCount(10)
         `when`(studioRepository.findById(1L)).thenReturn(Optional.of(studio))
         `when`(studioRepository.incrementHamper(1L)).thenReturn(1)
 

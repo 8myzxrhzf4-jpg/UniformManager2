@@ -19,8 +19,8 @@ class HamperService(private val studioRepository: StudioRepository) {
         
         studioRepository.incrementHamper(studioId)
         
-        // Check if at or over capacity
-        return studio.currentHamperCount + 1 >= studio.hamperCapacity
+        // Check if at or over capacity (use Java getters)
+        return studio.getCurrentHamperCount() + 1 >= studio.getHamperCapacity()
     }
 
     /**
