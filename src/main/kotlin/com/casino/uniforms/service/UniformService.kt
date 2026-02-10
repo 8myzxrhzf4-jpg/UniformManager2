@@ -119,6 +119,7 @@ class UniformService(
     @Transactional
     fun bulkUpdateStatus(dto: BulkStatusUpdateDto): List<UniformItem> {
         val results = mutableListOf<UniformItem>()
+        val errors = mutableListOf<String>()
         
         for (barcode in dto.barcodes) {
             try {
@@ -128,9 +129,13 @@ class UniformService(
                 validateAndUpdateStatus(uniform, dto.status)
                 results.add(uniformItemRepository.save(uniform))
             } catch (e: Exception) {
-                // Continue processing other items
-                throw e // For now, fail on first error
+                errors.add("$barcode: ${e.message}")
             }
+        }
+        
+        // If there were any errors, throw exception with all error details
+        if (errors.isNotEmpty()) {
+            throw InvalidStatusTransitionException("Bulk update failed for some items: ${errors.joinToString("; ")}")
         }
         
         return results

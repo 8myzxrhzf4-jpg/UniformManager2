@@ -12,10 +12,8 @@ data class UniformCreateDto(
     @field:NotBlank(message = "Barcode is required")
     val barcode: String,
     
-    @field:NotNull(message = "Status is required")
     val status: String = "In Stock",
     
-    @field:NotNull(message = "Category is required")
     val category: String = "Other",
     
     val studioLocation: String? = null

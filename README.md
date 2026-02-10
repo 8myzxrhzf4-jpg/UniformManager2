@@ -261,6 +261,13 @@ mvn test
 ## Configuration
 Application configuration is in `src/main/resources/application.yml`
 
+### Production Considerations
+- **JWT Secret**: The JWT secret is currently generated at runtime. For production, set a persistent secret via environment variable or secure configuration to maintain token validity across restarts.
+- **Database**: Replace H2 in-memory database with a persistent database (PostgreSQL, MySQL, etc.)
+- **Password Encryption**: Default user passwords should be changed immediately
+- **HTTPS**: Enable HTTPS in production environments
+- **CORS**: Configure appropriate CORS settings for your frontend application
+
 ## Testing with cURL
 
 ### 1. Login
