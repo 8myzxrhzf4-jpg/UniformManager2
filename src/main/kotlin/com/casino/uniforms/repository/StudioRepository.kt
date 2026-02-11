@@ -17,6 +17,14 @@ interface StudioRepository : JpaRepository<Studio, Long> {
     fun incrementHamperIfNotFull(@Param("id") id: Long): Int
 
     @Modifying
+    @Query("UPDATE Studio s SET s.currentHamperCount = s.currentHamperCount + 1 WHERE s.id = :id")
+    fun incrementHamper(@Param("id") id: Long): Int
+
+    @Modifying
+    @Query("UPDATE Studio s SET s.currentHamperCount = CASE WHEN s.currentHamperCount > 0 THEN s.currentHamperCount - 1 ELSE 0 END WHERE s.id = :id")
+    fun decrementHamper(@Param("id") id: Long): Int
+
+    @Modifying
     @Query("UPDATE Studio s SET s.currentHamperCount = 0 WHERE s.id = :id")
     fun resetHamperCount(@Param("id") id: Long): Int
 }
