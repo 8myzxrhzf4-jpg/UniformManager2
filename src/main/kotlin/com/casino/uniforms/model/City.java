@@ -1,18 +1,23 @@
 package com.casino.uniforms.model;
 
-import jakarta.persistence.*;
+import javax.persistence.*;
+import java.util.Set;
 
 @Entity
-@Table(name = "game_presenters")
-public class GamePresenter {
+@Table(name = "cities")
+public class City {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false, unique = true)
     private String name;
 
-    @Column(unique = true)
-    private String barcode;
+    @OneToMany(mappedBy = "city")
+    private Set<Studio> studios;
+
+    // Getters and Setters
 
     public Long getId() {
         return id;
@@ -30,11 +35,11 @@ public class GamePresenter {
         this.name = name;
     }
 
-    public String getBarcode() {
-        return barcode;
+    public Set<Studio> getStudios() {
+        return studios;
     }
 
-    public void setBarcode(String barcode) {
-        this.barcode = barcode;
+    public void setStudios(Set<Studio> studios) {
+        this.studios = studios;
     }
 }

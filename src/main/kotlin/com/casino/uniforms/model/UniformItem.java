@@ -1,6 +1,6 @@
 package com.casino.uniforms.model;
 
-import jakarta.persistence.*;
+import javax.persistence.*;
 
 @Entity
 @Table(name = "uniform_items")

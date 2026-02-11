@@ -1,327 +1,48 @@
-# UniformManager2 Backend API
+# UniformManager2
 
-## Overview
-This is the backend API for the UniformManager2 application, providing uniform inventory management with status tracking, security, and hamper management.
+UniformManager2 is a Spring Boot + Android (Jetpack Compose) project for tracking casino uniform inventory, issuing/returning items, managing laundry hampers, and auditing activity.
 
 ## Features
+- **Inventory management**: Track uniforms by name, size, barcode, status, category, and studio location.
+- **Issuing & returning**: Issue uniforms to game presenters; return to hampers with soft capacity warnings.
+- **Laundry management**: Create laundry orders, mark items to hampers, and track pickups/dropoffs.
+- **Studios & cities**: Manage studios per city with hamper capacities.
+- **Audit logging**: Record actions (issue, return, transfers) for traceability.
+- **Roles & users**: Admin/staff/auditor roles (seeded users in migrations; security wiring pending PR).
+- **Soft hamper limits with warnings**: Counts can exceed capacity; warnings prompt pickups.
 
-### 1. Status Management
-The API supports canonical uniform statuses with strict transition rules:
+## Architecture (brief)
+- **Backend**: Spring Boot 3, Spring Data JPA, Flyway migrations (pending merge), services for inventory, assignments, hampers, and laundry. Entities: `UniformItem`, `Studio`, `GamePresenter`, etc. Repositories with barcode/studio queries.
+- **Persistence**: PostgreSQL (recommended). Flyway migrations initialize schema (tables for cities, studios, presenters, uniform_items, assignments, laundry_orders, audit_entries, users/roles, idempotency keys, timestamps).
+- **Security (in-progress)**: JWT + role-based guards (ADMIN/STAFF/AUDITOR). Users/roles seeded via migrations.
+- **Android app**: Jetpack Compose UI with barcode scanning; local persistence via SharedPreferences + Gson for offline-first behavior. Status vocabulary alignment with backend is in progress (map “In Hamper” to “In Laundry”).
 
-**Canonical Statuses:**
-- `In Stock` - Uniform is available in inventory
-- `Issued` - Uniform is issued to a presenter
-- `In Laundry` - Uniform is in the laundry/hamper
-- `Damaged` - Uniform is damaged (terminal state)
-- `Lost` - Uniform is lost (terminal state)
+## Quick Start (backend)
+1. **Prereqs**: JDK 17+, PostgreSQL, Gradle/Maven wrapper available.
+2. **Configure DB**: Set `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`. Ensure Flyway is enabled (default).
+3. **Run**: `./gradlew bootRun` (or `mvn spring-boot:run`).
+4. **Verify migrations**: `SELECT * FROM flyway_schema_history;` — expect V1–V5.
+5. **Status flow** (canonical): `In Stock → Issued → In Laundry → In Stock`; `Damaged/Lost` terminal. If client sends “In Hamper,” map to “In Laundry”.
+6. **Hamper counts**: Soft limit; operations continue when capacity is exceeded, but warnings should be surfaced. Ensure pickups call decrement.
 
-**Android App Compatibility:**
-- The API accepts `In Hamper` as an alias for `In Laundry`
-- When the client sends status "In Hamper", it is automatically mapped to "In Laundry"
+## Quick Start (Android app)
+1. Open the project in Android Studio (Giraffe+), let it sync Gradle.
+2. Run on device/emulator with camera for barcode scanning.
+3. Select city/studio, scan presenter barcode to set staff, then scan uniform items to issue/return.
+4. Laundry screen shows hamper utilization; “full” triggers warning but not a block.
 
-**Status Transitions:**
-- `In Stock` → `Issued`
-- `Issued` → `In Laundry`, `In Stock` (return), `Damaged`, `Lost`
-- `In Laundry` → `In Stock`, `Damaged`, `Lost`
-- `Damaged` and `Lost` are terminal states (no transitions allowed except by admin restore)
+## API/Security (planned/ongoing)
+- JWT authentication with seeded users (admin/staff/auditor) from migrations.
+- Protect mutating endpoints for STAFF/ADMIN; audit endpoints for ADMIN/AUDITOR.
+- Include README snippet later with `/auth/login` and Authorization header usage once security PR is merged.
 
-### 2. Validation & Defaults
-- **Required Fields:** barcode, name, status, category
-- **Validation:** 
-  - `@NotBlank` for barcode and name
-  - `@NotNull` for status and category
-- **Database Defaults:**
-  - `status` defaults to "In Stock"
-  - `category` defaults to "Other"
-  - `barcode`, `status`, and `category` have NOT NULL constraints
+## Development Notes
+- Entities should import `jakarta.persistence.*` (Spring Boot 3).
+- Keep barcode unique (service should return 409 on conflict; DB unique index as safety net).
+- Enforce validation on DTOs (@Valid) for required fields (barcode, name, status, category).
 
-### 3. Barcode Uniqueness
-- Service-layer check for uniform barcode uniqueness
-- Returns HTTP 409 (Conflict) with structured error response
-- Database unique index as safety net
-
-### 4. Security
-**Authentication:**
-- JWT-based authentication
-- Login endpoint: `POST /api/auth/login`
-
-**Roles:**
-- `ADMIN` - Full access including delete operations
-- `STAFF` - Can create, update, issue, return uniforms
-- `AUDITOR` - Read-only access (for future audit endpoints)
-
-**Endpoint Protection:**
-- Mutating endpoints (POST, PUT, DELETE) require STAFF or ADMIN role
-- Delete operations require ADMIN role
-- GET operations require authentication
-
-**Default Users (Development):**
-- Username: `admin`, Password: `admin123`, Role: ADMIN
-- Username: `staff`, Password: `staff123`, Role: STAFF
-
-### 5. Hamper Management
-- Soft-limit hamper counts (can exceed capacity with warning)
-- Automatic decrement on pickup/dropoff paths
-- Utilization tracking through `HamperService`
-
-## API Endpoints
-
-### Authentication
-```
-POST /api/auth/login
-Request: { "username": "admin", "password": "admin123" }
-Response: { "token": "jwt-token", "username": "admin", "roles": ["ADMIN"] }
-```
-
-### Uniform Management
-
-#### Create Uniform
-```
-POST /api/uniforms
-Headers: Authorization: Bearer <token>
-Request: {
-  "name": "Blue Shirt",
-  "barcode": "SHIRT001",
-  "status": "In Stock",  // or "In Hamper" - mapped to "In Laundry"
-  "category": "Shirt",
-  "size": "M"
-}
-Response: 201 Created
-```
-
-#### Get All Uniforms
-```
-GET /api/uniforms
-Headers: Authorization: Bearer <token>
-Response: 200 OK
-```
-
-#### Get Uniform by Barcode
-```
-GET /api/uniforms/{barcode}
-Headers: Authorization: Bearer <token>
-Response: 200 OK
-```
-
-#### Update Uniform
-```
-PUT /api/uniforms/{barcode}
-Headers: Authorization: Bearer <token>
-Request: {
-  "name": "Updated Name",
-  "category": "Updated Category"
-}
-Response: 200 OK
-```
-
-#### Update Status
-```
-PUT /api/uniforms/{barcode}/status
-Headers: Authorization: Bearer <token>
-Request: { "status": "Issued" }
-Response: 200 OK
-```
-
-#### Issue Uniform
-```
-POST /api/uniforms/{barcode}/issue
-Headers: Authorization: Bearer <token>
-Response: 200 OK
-```
-
-#### Return Uniform
-```
-POST /api/uniforms/{barcode}/return
-Headers: Authorization: Bearer <token>
-Response: 200 OK
-```
-
-#### Send to Laundry
-```
-POST /api/uniforms/{barcode}/laundry
-Headers: Authorization: Bearer <token>
-Response: 200 OK
-```
-
-#### Pickup from Laundry
-```
-POST /api/uniforms/{barcode}/pickup
-Headers: Authorization: Bearer <token>
-Response: 200 OK
-```
-
-#### Bulk Status Update
-```
-POST /api/uniforms/bulk/status
-Headers: Authorization: Bearer <token>
-Request: {
-  "barcodes": ["SHIRT001", "SHIRT002"],
-  "status": "In Laundry"
-}
-Response: 200 OK
-```
-
-#### Delete Uniform (Admin only)
-```
-DELETE /api/uniforms/{barcode}
-Headers: Authorization: Bearer <token>
-Response: 204 No Content
-```
-
-## Error Responses
-
-### 400 Bad Request - Invalid Status
-```json
-{
-  "status": 400,
-  "message": "Invalid status: InvalidStatus. Allowed values: In Stock, Issued, In Laundry, Damaged, Lost, In Hamper (alias for In Laundry)",
-  "timestamp": 1234567890
-}
-```
-
-### 400 Bad Request - Invalid Transition
-```json
-{
-  "status": 400,
-  "message": "Invalid status transition from 'In Stock' to 'In Laundry'. Allowed transitions: Issued",
-  "timestamp": 1234567890
-}
-```
-
-### 400 Bad Request - Validation Error
-```json
-{
-  "status": 400,
-  "message": "Validation failed",
-  "errors": [
-    "barcode: Barcode is required",
-    "name: Name is required"
-  ],
-  "timestamp": 1234567890
-}
-```
-
-### 409 Conflict - Duplicate Barcode
-```json
-{
-  "status": 409,
-  "message": "Uniform with barcode 'SHIRT001' already exists",
-  "timestamp": 1234567890
-}
-```
-
-### 404 Not Found
-```json
-{
-  "status": 404,
-  "message": "Uniform with barcode 'NONEXISTENT' not found",
-  "timestamp": 1234567890
-}
-```
-
-### 403 Forbidden - Insufficient Permissions
-```json
-{
-  "status": 403,
-  "message": "Access denied",
-  "timestamp": 1234567890
-}
-```
-
-## Building and Running
-
-### Prerequisites
-- Java 17
-- Maven 3.6+
-
-### Build
-```bash
-mvn clean install
-```
-
-### Run
-```bash
-mvn spring-boot:run
-```
-
-The application will start on `http://localhost:8080`
-
-### Run Tests
-```bash
-mvn test
-```
-
-## Database
-- H2 in-memory database (development)
-- Console available at: `http://localhost:8080/h2-console`
-  - JDBC URL: `jdbc:h2:mem:testdb`
-  - Username: `sa`
-  - Password: `password`
-
-## Configuration
-Application configuration is in `src/main/resources/application.yml`
-
-### Production Considerations
-- **JWT Secret**: The JWT secret is currently generated at runtime. For production, set a persistent secret via environment variable or secure configuration to maintain token validity across restarts.
-- **Database**: Replace H2 in-memory database with a persistent database (PostgreSQL, MySQL, etc.)
-- **Password Encryption**: Default user passwords should be changed immediately
-- **HTTPS**: Enable HTTPS in production environments
-- **CORS**: Configure appropriate CORS settings for your frontend application
-
-## Testing with cURL
-
-### 1. Login
-```bash
-curl -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
-```
-
-### 2. Create Uniform
-```bash
-curl -X POST http://localhost:8080/api/uniforms \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Blue Shirt","barcode":"SHIRT001","status":"In Stock","category":"Shirt"}'
-```
-
-### 3. Test Android Compatibility (In Hamper → In Laundry)
-```bash
-curl -X POST http://localhost:8080/api/uniforms \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test Item","barcode":"TEST001","status":"In Hamper","category":"Test"}'
-```
-
-### 4. Test Duplicate Barcode (should return 409)
-```bash
-curl -X POST http://localhost:8080/api/uniforms \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Duplicate","barcode":"SHIRT001","status":"In Stock","category":"Shirt"}'
-```
-
-## Architecture
-
-### Layers
-1. **Controller Layer** - REST API endpoints with security annotations
-2. **Service Layer** - Business logic, validation, transaction management
-3. **Repository Layer** - JPA data access
-4. **Model Layer** - JPA entities
-5. **Security Layer** - JWT authentication, role-based access control
-
-### Key Components
-- `UniformController` - Main API endpoints
-- `UniformService` - Business logic for uniform operations
-- `HamperService` - Hamper count management
-- `JwtUtil` - JWT token generation and validation
-- `CustomUserDetailsService` - User authentication
-- `SecurityConfig` - Spring Security configuration
-- `GlobalExceptionHandler` - Centralized error handling
-- `UniformStatus` - Status enum with transition validation
-
-## Notes
-- Terminal states (Damaged, Lost) prevent further transitions unless restored by admin
-- Hamper counts use soft limits - can exceed capacity but log warnings
-- All timestamps use system time (UTC recommended for production)
-- JWT tokens expire after 24 hours
+## Roadmap / Open Items
+- Merge Flyway migrations (schema) and jakarta imports.
+- Merge soft-limit hamper handling with warnings and decrement on pickups.
+- Merge status alignment/validation/security PR.
+- Align Android status vocabulary with backend.

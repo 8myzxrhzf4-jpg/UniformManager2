@@ -1,47 +1,45 @@
 package com.casino.uniforms.service
 
-import com.casino.uniforms.exception.ResourceNotFoundException
 import com.casino.uniforms.repository.StudioRepository
-import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 @Service
-class HamperService(
-    private val studioRepository: StudioRepository
-) {
-    private val logger = LoggerFactory.getLogger(HamperService::class.java)
-    
+class HamperService(private val studioRepository: StudioRepository) {
+
+    /**
+     * Increments the hamper count for a studio (soft limit - allows going over capacity).
+     * @param studioId The ID of the studio
+     * @return true if hamper is at or over capacity (warning), false otherwise
+     */
     @Transactional
-    fun addToHamper(studioId: Long) {
+    fun incrementHamper(studioId: Long): Boolean {
         val studio = studioRepository.findById(studioId)
-            .orElseThrow { ResourceNotFoundException("Studio with id $studioId not found") }
+            .orElseThrow { IllegalArgumentException("Studio not found with id: $studioId") }
         
-        val newCount = studio.currentHamperCount + 1
+        studioRepository.incrementHamper(studioId)
+        studioRepository.flush()  // Ensure the increment is flushed to the database
         
-        // Soft limit - allow exceeding capacity but warn
-        if (newCount > studio.hamperCapacity) {
-            logger.warn("Studio ${studio.name} hamper count ($newCount) exceeds capacity (${studio.hamperCapacity})")
-        }
+        // Re-read the studio to get the updated count
+        val updatedStudio = studioRepository.findById(studioId).orElseThrow()
         
-        studio.currentHamperCount = newCount
-        studioRepository.save(studio)
+        // Check if at or over capacity (use Java getters)
+        return updatedStudio.getCurrentHamperCount() >= studio.getHamperCapacity()
     }
-    
+
+    /**
+     * Decrements the hamper count for a studio.
+     * @param studioId The ID of the studio
+     */
     @Transactional
-    fun removeFromHamper(studioId: Long) {
-        val studio = studioRepository.findById(studioId)
-            .orElseThrow { ResourceNotFoundException("Studio with id $studioId not found") }
-        
-        // Decrement count, but don't go below 0
-        if (studio.currentHamperCount > 0) {
-            studio.currentHamperCount -= 1
-            studioRepository.save(studio)
-        } else {
-            logger.warn("Studio ${studio.name} hamper count is already 0, cannot decrement")
-        }
+    fun decrementHamper(studioId: Long) {
+        studioRepository.decrementHamper(studioId)
     }
-    
+
+    /**
+     * Resets the hamper count for a studio to 0.
+     * @param studioId The ID of the studio
+     */
     @Transactional
     fun resetHamper(studioId: Long) {
         studioRepository.resetHamperCount(studioId)
