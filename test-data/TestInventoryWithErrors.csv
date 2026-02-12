@@ -1,0 +1,7 @@
+ITEM,SIZE,BARCODE,STATUS,City,Studio
+Valid Item 1,M,TEST001,In Stock,Vegas,Floor 1
+Valid Item 2,L,TEST002,,Vegas,Floor 2
+Duplicate Barcode,S,TEST001,In Stock,Vegas,Floor 1
+Missing Barcode,XL,,In Stock,Vegas,Floor 1
+,M,TEST004,In Stock,Vegas,Floor 1
+Valid Item 3,L,TEST005,Issued,Vegas,
