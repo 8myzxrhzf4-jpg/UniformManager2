@@ -94,6 +94,18 @@ data class AuditEntry(val date: String, val action: String, val details: String)
 
 data class AuditDiff(val name: String, val barcode: String, val expectedStatus: String, val countedStatus: String)
 
+data class ImportResult(
+    val added: Int,
+    val skipped: Int,
+    val skippedRows: List<SkippedRow>
+)
+
+data class SkippedRow(
+    val rowNumber: Int,
+    val data: String,
+    val reason: String
+)
+
 // --- BRANDING COLORS ---
 val NavyBG = Color(0xFF050A18)
 val Gold = Color(0xFFFFD700)
@@ -330,19 +342,24 @@ fun UniformApp() {
                             Icon(Icons.Default.ReportProblem, null); Spacer(Modifier.width(8.dp)); Text("DAMAGED / LOSS", fontWeight = FontWeight.Bold)
                         }
 
-                        // Exports & Imports
+                        // Import/Export & Logs
                         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Column(Modifier.weight(1f)) {
-                                OutlinedButton(onClick = { invImp.launch(arrayOf("*/*")) }, Modifier.fillMaxWidth().padding(2.dp)) { Text("IMP INV", fontSize = 9.sp) }
-                                OutlinedButton(onClick = { invExp.launch(getFileName("Inventory")) }, Modifier.fillMaxWidth().padding(2.dp)) { Text("EXP INV", fontSize = 9.sp) }
+                            Button(
+                                onClick = { activeScreen = "import_export" },
+                                modifier = Modifier.weight(1f).height(60.dp).padding(horizontal = 4.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SurfaceBlue)
+                            ) {
+                                Icon(Icons.Default.ImportExport, null, tint = Gold)
+                                Spacer(Modifier.width(8.dp))
+                                Text("IMPORT / EXPORT", color = Gold, fontWeight = FontWeight.Bold)
                             }
-                            Column(Modifier.weight(1f)) {
-                                OutlinedButton(onClick = { gpImp.launch(arrayOf("*/*")) }, Modifier.fillMaxWidth().padding(2.dp)) { Text("IMP GP", fontSize = 9.sp) }
-                                OutlinedButton(onClick = { issuedExp.launch(getFileName("Issued")) }, Modifier.fillMaxWidth().padding(2.dp)) { Text("EXP ISSUED", fontSize = 9.sp) }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            OutlinedButton(onClick = { activeScreen = "view_logs" }, Modifier.weight(1f).padding(horizontal = 2.dp)) {
+                                Text("VIEW HISTORY")
                             }
-                            Column(Modifier.weight(1f)) {
-                                OutlinedButton(onClick = { activeScreen = "view_logs" }, Modifier.fillMaxWidth().padding(2.dp)) { Text("HISTORY", fontSize = 9.sp) }
-                                OutlinedButton(onClick = { logExp.launch(getFileName("History")) }, Modifier.fillMaxWidth().padding(2.dp)) { Text("EXP LOGS", fontSize = 9.sp) }
+                            OutlinedButton(onClick = { logExp.launch(getFileName("History")) }, Modifier.weight(1f).padding(horizontal = 2.dp)) {
+                                Text("EXPORT LOGS")
                             }
                         }
 
@@ -478,6 +495,18 @@ fun UniformApp() {
                 }, { activeScreen = "home" })
 
                 "view_logs" -> LogScreen(auditLogs) { activeScreen = "home" }
+
+                "import_export" -> ImportExportScreen(
+                    inventory = inventory,
+                    gpList = gpList,
+                    selectedCityName = selectedCityName,
+                    selectedStudioName = selectedStudioName,
+                    invImpLauncher = invImp,
+                    gpImpLauncher = gpImp,
+                    invExpLauncher = invExp,
+                    issuedExpLauncher = issuedExp,
+                    onBack = { activeScreen = "home" }
+                )
             }
         }
     }
@@ -792,6 +821,190 @@ fun LogScreen(logs: List<AuditEntry>, onClose: () -> Unit) {
 }
 
 @Composable
+fun ImportExportScreen(
+    inventory: List<UniformItem>,
+    gpList: List<GamePresenter>,
+    selectedCityName: String,
+    selectedStudioName: String,
+    invImpLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>,
+    gpImpLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>,
+    invExpLauncher: androidx.activity.result.ActivityResultLauncher<String>,
+    issuedExpLauncher: androidx.activity.result.ActivityResultLauncher<String>,
+    onBack: () -> Unit
+) {
+    var selectedTab by remember { mutableStateOf("Inventory") }
+    val tabs = listOf("Inventory", "Game Presenters (GPs)")
+    
+    Column(Modifier.fillMaxSize().padding(16.dp).background(NavyBG)) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Gold)
+            }
+            Text(
+                "Import / Export",
+                color = Gold,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        
+        Spacer(Modifier.height(16.dp))
+        
+        // Tab Selection Dropdown
+        var expanded by remember { mutableStateOf(false) }
+        Box {
+            OutlinedButton(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Gold)
+            ) {
+                Text("Import Type: $selectedTab")
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Default.ArrowDropDown, null)
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.background(SurfaceBlue)
+            ) {
+                tabs.forEach { tab ->
+                    DropdownMenuItem(
+                        text = { Text(tab, color = Color.White) },
+                        onClick = {
+                            selectedTab = tab
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+        
+        Spacer(Modifier.height(16.dp))
+        
+        // Help Text based on selected tab
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = SurfaceBlue)
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text(
+                    if (selectedTab == "Inventory") "Inventory Import Requirements" else "Game Presenter Import Requirements",
+                    color = Gold,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(8.dp))
+                if (selectedTab == "Inventory") {
+                    Text(
+                        "Required columns (case-insensitive):\n" +
+                        "• ITEM - uniform item name\n" +
+                        "• SIZE - item size\n" +
+                        "• BARCODE - unique identifier\n" +
+                        "• STATUS - item status (default: In Stock)\n" +
+                        "• City - city name (optional)\n" +
+                        "• Studio - studio location (default: current studio)\n\n" +
+                        "Duplicates (by barcode) will be skipped.",
+                        color = Color.White,
+                        fontSize = 12.sp
+                    )
+                } else {
+                    Text(
+                        "Required columns (case-insensitive):\n" +
+                        "• Dealer - presenter name\n" +
+                        "• ID card - unique identifier\n\n" +
+                        "Duplicates (by ID card) will be skipped.",
+                        color = Color.White,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+        
+        Spacer(Modifier.height(16.dp))
+        
+        // Import/Export Buttons
+        Column(Modifier.fillMaxWidth()) {
+            Text("Import", color = Gold, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            
+            Button(
+                onClick = {
+                    if (selectedTab == "Inventory") {
+                        invImpLauncher.launch(arrayOf("*/*"))
+                    } else {
+                        gpImpLauncher.launch(arrayOf("*/*"))
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = NavyBG)
+            ) {
+                Icon(Icons.Default.Upload, null)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    if (selectedTab == "Inventory") "Import Inventory" else "Import Game Presenters",
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Spacer(Modifier.height(24.dp))
+            
+            Text("Export", color = Gold, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            
+            if (selectedTab == "Inventory") {
+                OutlinedButton(
+                    onClick = { invExpLauncher.launch("${selectedCityName}_${selectedStudioName}_Inventory.csv") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Download, null, tint = Gold)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Export Inventory")
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { issuedExpLauncher.launch("${selectedCityName}_${selectedStudioName}_Issued.csv") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Download, null, tint = Gold)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Export Issued Items")
+                }
+            } else {
+                Text(
+                    "Export for Game Presenters is not available in this version.",
+                    color = Color.Gray,
+                    fontSize = 12.sp
+                )
+            }
+        }
+        
+        Spacer(Modifier.height(24.dp))
+        
+        // Preview Section
+        Card(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            colors = CardDefaults.cardColors(containerColor = SurfaceBlue)
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Preview", color = Gold, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                
+                if (selectedTab == "Inventory") {
+                    Text("Current Inventory Count: ${inventory.size}", color = Color.White, fontSize = 12.sp)
+                    Text("Studio: $selectedStudioName", color = Color.Gray, fontSize = 10.sp)
+                } else {
+                    Text("Current Game Presenters: ${gpList.size}", color = Color.White, fontSize = 12.sp)
+                    Text("City: $selectedCityName", color = Color.Gray, fontSize = 10.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun TransferItemDialog(inventory: List<UniformItem>, cityList: List<City>, onDismiss: () -> Unit, onTransfer: (UniformItem, String, String) -> Unit) {
     var item by remember { mutableStateOf<UniformItem?>(null) }
     var destCity by remember { mutableStateOf(cityList.firstOrNull()?.name ?: "") }
@@ -948,38 +1161,220 @@ fun BarcodeScannerView(onBarcodeDetected: (String) -> Unit, onClose: () -> Unit)
 
 fun importInventoryCsv(context: Context, uri: Uri, currentInventory: SnapshotStateList<UniformItem>, city: String, studio: String, onDone: () -> Unit) {
     try {
+        var result: ImportResult? = null
         context.contentResolver.openInputStream(uri)?.use { s ->
             BufferedReader(InputStreamReader(s)).use { r ->
-                r.readLine() // Header
+                val headerLine = r.readLine()
+                if (headerLine == null) {
+                    Toast.makeText(context, "Empty file", Toast.LENGTH_SHORT).show()
+                    return@use
+                }
+                
+                // Parse header (case-insensitive)
+                val headers = headerLine.split(",").map { it.trim().lowercase() }
+                val itemIdx = headers.indexOf("item")
+                val sizeIdx = headers.indexOf("size")
+                val barcodeIdx = headers.indexOf("barcode")
+                val statusIdx = headers.indexOf("status")
+                val cityIdx = headers.indexOf("city")
+                val studioIdx = headers.indexOf("studio")
+                
+                // Validate required columns
+                if (itemIdx == -1 || sizeIdx == -1 || barcodeIdx == -1) {
+                    Toast.makeText(context, "Missing required columns: ITEM, SIZE, BARCODE", Toast.LENGTH_LONG).show()
+                    return@use
+                }
+                
+                var added = 0
+                var skipped = 0
+                val skippedRows = mutableListOf<SkippedRow>()
+                val seenBarcodes = mutableSetOf<String>()
+                var rowNumber = 1 // Start from 1 (after header)
+                
                 var line: String?
                 while (r.readLine().also { line = it } != null) {
-                    val p = line!!.split(",")
-                    if (p.size >= 3 && !currentInventory.any { it.barcode == p[2].trim() }) {
-                        val name = p[0].trim()
-                        // Force import into currently selected city/studio
-                        currentInventory.add(UniformItem(name, p[1].trim(), p[2].trim(), "In Stock", determineCategory(name), studio))
+                    rowNumber++
+                    val parts = line!!.split(",").map { it.trim() }
+                    
+                    // Check minimum columns
+                    if (parts.size <= maxOf(itemIdx, sizeIdx, barcodeIdx)) {
+                        skippedRows.add(SkippedRow(rowNumber, line!!, "Insufficient columns"))
+                        skipped++
+                        continue
                     }
+                    
+                    val barcode = parts[barcodeIdx]
+                    val name = parts[itemIdx]
+                    val size = parts[sizeIdx]
+                    
+                    // Skip if barcode is empty
+                    if (barcode.isEmpty()) {
+                        skippedRows.add(SkippedRow(rowNumber, line!!, "Empty barcode"))
+                        skipped++
+                        continue
+                    }
+                    
+                    // Check for duplicate in current file
+                    if (seenBarcodes.contains(barcode)) {
+                        skippedRows.add(SkippedRow(rowNumber, line!!, "Duplicate barcode in file"))
+                        skipped++
+                        continue
+                    }
+                    
+                    // Check for duplicate in existing inventory
+                    if (currentInventory.any { it.barcode == barcode }) {
+                        skippedRows.add(SkippedRow(rowNumber, line!!, "Barcode already exists in inventory"))
+                        skipped++
+                        continue
+                    }
+                    
+                    // Get status with default
+                    val status = if (statusIdx >= 0 && statusIdx < parts.size && parts[statusIdx].isNotEmpty()) {
+                        parts[statusIdx]
+                    } else {
+                        "In Stock"
+                    }
+                    
+                    // Get studio location with default
+                    val studioLocation = if (studioIdx >= 0 && studioIdx < parts.size && parts[studioIdx].isNotEmpty()) {
+                        parts[studioIdx]
+                    } else {
+                        studio // Use current studio as default
+                    }
+                    
+                    // Add to inventory
+                    currentInventory.add(UniformItem(name, size, barcode, status, determineCategory(name), studioLocation))
+                    seenBarcodes.add(barcode)
+                    added++
                 }
+                
+                result = ImportResult(added, skipped, skippedRows)
             }
         }
+        
+        // Show summary
+        result?.let { res ->
+            val message = "Import complete: ${res.added} added, ${res.skipped} skipped"
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            
+            // Save skipped rows log if any
+            if (res.skippedRows.isNotEmpty()) {
+                saveSkippedRowsLog(context, res.skippedRows, "inventory_import_skipped.csv")
+            }
+        }
+        
         onDone()
-    } catch (e: Exception) { }
+    } catch (e: Exception) {
+        Toast.makeText(context, "Import error: ${e.message}", Toast.LENGTH_LONG).show()
+    }
 }
 
 fun importGPCsv(context: Context, uri: Uri, currentGps: SnapshotStateList<GamePresenter>, onDone: () -> Unit) {
     try {
+        var result: ImportResult? = null
         context.contentResolver.openInputStream(uri)?.use { s ->
             BufferedReader(InputStreamReader(s)).use { r ->
-                r.readLine()
+                val headerLine = r.readLine()
+                if (headerLine == null) {
+                    Toast.makeText(context, "Empty file", Toast.LENGTH_SHORT).show()
+                    return@use
+                }
+                
+                // Parse header (case-insensitive)
+                val headers = headerLine.split(",").map { it.trim().lowercase() }
+                val dealerIdx = headers.indexOf("dealer")
+                val idCardIdx = headers.indexOfFirst { it == "id card" || it == "idcard" }
+                
+                // Validate required columns
+                if (dealerIdx == -1 || idCardIdx == -1) {
+                    Toast.makeText(context, "Missing required columns: Dealer, ID card", Toast.LENGTH_LONG).show()
+                    return@use
+                }
+                
+                var added = 0
+                var skipped = 0
+                val skippedRows = mutableListOf<SkippedRow>()
+                val seenIdCards = mutableSetOf<String>()
+                var rowNumber = 1 // Start from 1 (after header)
+                
                 var line: String?
                 while (r.readLine().also { line = it } != null) {
-                    val p = line!!.split(",")
-                    if (p.size >= 2) currentGps.add(GamePresenter(p[0].trim(), p[1].trim()))
+                    rowNumber++
+                    val parts = line!!.split(",").map { it.trim() }
+                    
+                    // Check minimum columns
+                    if (parts.size <= maxOf(dealerIdx, idCardIdx)) {
+                        skippedRows.add(SkippedRow(rowNumber, line!!, "Insufficient columns"))
+                        skipped++
+                        continue
+                    }
+                    
+                    val dealer = parts[dealerIdx]
+                    val idCard = parts[idCardIdx]
+                    
+                    // Skip if ID card is empty
+                    if (idCard.isEmpty()) {
+                        skippedRows.add(SkippedRow(rowNumber, line!!, "Empty ID card"))
+                        skipped++
+                        continue
+                    }
+                    
+                    // Check for duplicate in current file
+                    if (seenIdCards.contains(idCard)) {
+                        skippedRows.add(SkippedRow(rowNumber, line!!, "Duplicate ID card in file"))
+                        skipped++
+                        continue
+                    }
+                    
+                    // Check for duplicate in existing GPs (by barcode which is used as ID)
+                    if (currentGps.any { it.barcode == idCard }) {
+                        skippedRows.add(SkippedRow(rowNumber, line!!, "ID card already exists"))
+                        skipped++
+                        continue
+                    }
+                    
+                    // Add to GP list (using barcode field for ID card)
+                    currentGps.add(GamePresenter(dealer, idCard))
+                    seenIdCards.add(idCard)
+                    added++
                 }
+                
+                result = ImportResult(added, skipped, skippedRows)
             }
         }
+        
+        // Show summary
+        result?.let { res ->
+            val message = "Import complete: ${res.added} added, ${res.skipped} skipped"
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            
+            // Save skipped rows log if any
+            if (res.skippedRows.isNotEmpty()) {
+                saveSkippedRowsLog(context, res.skippedRows, "gp_import_skipped.csv")
+            }
+        }
+        
         onDone()
-    } catch (e: Exception) { }
+    } catch (e: Exception) {
+        Toast.makeText(context, "Import error: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+
+fun saveSkippedRowsLog(context: Context, skippedRows: List<SkippedRow>, fileName: String) {
+    try {
+        val downloadsDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS)
+        val file = java.io.File(downloadsDir, fileName)
+        file.bufferedWriter().use { writer ->
+            writer.write("Row Number,Data,Reason\n")
+            skippedRows.forEach { row ->
+                writer.write("${row.rowNumber},\"${row.data}\",${row.reason}\n")
+            }
+        }
+        Toast.makeText(context, "Skipped rows log saved to Downloads/$fileName", Toast.LENGTH_LONG).show()
+    } catch (e: Exception) {
+        // Silently fail if unable to save log
+    }
+}
 }
 
 fun exportInventoryCsv(context: Context, uri: Uri, inventory: List<UniformItem>, city: String, studio: String) {
