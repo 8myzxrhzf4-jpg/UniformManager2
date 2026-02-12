@@ -1207,9 +1207,21 @@ fun importInventoryCsv(context: Context, uri: Uri, currentInventory: SnapshotSta
                     val name = parts[itemIdx]
                     val size = parts[sizeIdx]
                     
-                    // Skip if barcode is empty
+                    // Skip if required fields are empty
                     if (barcode.isEmpty()) {
                         skippedRows.add(SkippedRow(rowNumber, line!!, "Empty barcode"))
+                        skipped++
+                        continue
+                    }
+                    
+                    if (name.isEmpty()) {
+                        skippedRows.add(SkippedRow(rowNumber, line!!, "Empty item name"))
+                        skipped++
+                        continue
+                    }
+                    
+                    if (size.isEmpty()) {
+                        skippedRows.add(SkippedRow(rowNumber, line!!, "Empty size"))
                         skipped++
                         continue
                     }
@@ -1312,9 +1324,15 @@ fun importGPCsv(context: Context, uri: Uri, currentGps: SnapshotStateList<GamePr
                     val dealer = parts[dealerIdx]
                     val idCard = parts[idCardIdx]
                     
-                    // Skip if ID card is empty
+                    // Skip if required fields are empty
                     if (idCard.isEmpty()) {
                         skippedRows.add(SkippedRow(rowNumber, line!!, "Empty ID card"))
+                        skipped++
+                        continue
+                    }
+                    
+                    if (dealer.isEmpty()) {
+                        skippedRows.add(SkippedRow(rowNumber, line!!, "Empty dealer name"))
                         skipped++
                         continue
                     }
@@ -1367,7 +1385,7 @@ fun saveSkippedRowsLog(context: Context, skippedRows: List<SkippedRow>, fileName
         file.bufferedWriter().use { writer ->
             writer.write("Row Number,Data,Reason\n")
             skippedRows.forEach { row ->
-                writer.write("${row.rowNumber},\"${row.data}\",${row.reason}\n")
+                writer.write("${row.rowNumber},\"${row.data}\",\"${row.reason}\"\n")
             }
         }
         Toast.makeText(context, "Skipped rows log saved to Downloads/$fileName", Toast.LENGTH_LONG).show()

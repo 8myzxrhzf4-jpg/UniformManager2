@@ -86,7 +86,10 @@ Duplicates (by ID card) will be skipped.
    - Required: ITEM, SIZE, BARCODE
    - Optional: STATUS, City, Studio
 5. System processes each row:
+   - Checks for insufficient columns → skip with reason
    - Checks for empty barcode → skip with reason
+   - Checks for empty item name → skip with reason
+   - Checks for empty size → skip with reason
    - Checks for duplicate barcode in file → skip with reason
    - Checks for duplicate barcode in existing inventory → skip with reason
    - Valid rows are added to inventory
@@ -102,7 +105,9 @@ Duplicates (by ID card) will be skipped.
 4. System validates CSV headers (case-insensitive):
    - Required: Dealer, ID card (or "ID card" with space)
 5. System processes each row:
+   - Checks for insufficient columns → skip with reason
    - Checks for empty ID card → skip with reason
+   - Checks for empty dealer name → skip with reason
    - Checks for duplicate ID card in file → skip with reason
    - Checks for duplicate ID card in existing presenters → skip with reason
    - Valid rows are added to presenter list
@@ -124,15 +129,26 @@ When rows are skipped during import, a CSV file is created with:
 - **Format**:
   ```csv
   Row Number,Data,Reason
-  3,"Item,Size,,Status,City,Studio",Empty barcode
-  4,"Duplicate,M,INV001,In Stock,Vegas,Floor",Duplicate barcode in file
+  3,"Item,Size,,Status,City,Studio","Empty barcode"
+  4,"Duplicate,M,INV001,In Stock,Vegas,Floor","Duplicate barcode in file"
+  5,",M,INV002,In Stock,Vegas,Floor","Empty item name"
   ```
 
 ### Common Skip Reasons
+**Inventory Import:**
 - "Insufficient columns" - Row doesn't have enough fields
-- "Empty barcode" / "Empty ID card" - Required field is missing
-- "Duplicate barcode in file" / "Duplicate ID card in file" - Same identifier appears multiple times in the CSV
-- "Barcode already exists in inventory" / "ID card already exists" - Identifier is already in the database
+- "Empty barcode" - Barcode field is missing or empty
+- "Empty item name" - ITEM field is missing or empty
+- "Empty size" - SIZE field is missing or empty
+- "Duplicate barcode in file" - Same barcode appears multiple times in the CSV
+- "Barcode already exists in inventory" - Barcode is already in the database
+
+**Game Presenter Import:**
+- "Insufficient columns" - Row doesn't have enough fields
+- "Empty ID card" - ID card field is missing or empty
+- "Empty dealer name" - Dealer field is missing or empty
+- "Duplicate ID card in file" - Same ID card appears multiple times in the CSV
+- "ID card already exists" - ID card is already in the database
 
 ## Export Process
 
@@ -164,18 +180,23 @@ Date,Action,Details
 
 Sample CSV files are provided in the `test-data/` directory:
 
-1. **TestInventoryUnique.csv** - Valid inventory import with 10 items, no duplicates
-2. **gp_2-5-26.csv** - Valid GP import with 10 presenters, no duplicates
-3. **TestInventoryWithErrors.csv** - Demonstrates error handling:
-   - Valid items that should import
-   - Duplicate barcode (should be skipped)
-   - Empty barcode (should be skipped)
-   - Empty item name (should import but with empty name)
-4. **TestGPWithErrors.csv** - Demonstrates GP error handling:
-   - Valid presenters
-   - Duplicate ID card
-   - Empty ID card
-   - Empty name
+**Valid Files:**
+- `TestInventoryUnique.csv` - Valid inventory import with 10 items, no duplicates or errors
+- `gp_2-5-26.csv` - Valid game presenter import with 10 presenters, no duplicates or errors
+
+**Error Handling Test Files:**
+- `TestInventoryWithErrors.csv` - Demonstrates inventory error handling:
+  - Valid items that should import successfully
+  - Duplicate barcode (row 4: same barcode as row 2)
+  - Empty item name (row 5)
+  - Empty size (row 7)
+  - Valid items with optional fields empty (status defaults to "In Stock", studio defaults to current)
+  
+- `TestGPWithErrors.csv` - Demonstrates GP error handling:
+  - Valid presenters that should import successfully
+  - Duplicate ID card (row 4: same ID card as row 3)
+  - Empty dealer name (row 6)
+  - Empty ID card (row 8)
 
 ## UI Color Scheme
 

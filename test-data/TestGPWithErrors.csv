@@ -2,6 +2,7 @@ Dealer,ID card
 Valid Presenter,ID001
 Another Valid,ID002
 Duplicate ID,ID001
+Missing Dealer,ID003
+,ID004
+Valid Again,ID005
 Missing ID,
-,ID005
-Valid Again,ID003
