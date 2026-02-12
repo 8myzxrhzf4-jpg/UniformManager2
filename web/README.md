@@ -71,11 +71,44 @@ A comprehensive web application for casino uniform inventory management using Re
 - **Date range filters**: Optional date filtering for time-series data
 
 ### Analytics (Planned - Coming Soon)
-- Routinely issued GPs report (7d/30d/custom date ranges)
-- Items needed by size (weekly demand analysis)
-- Average lifespan by category
-- Smart weekly audit list generator (3-6 items per studio)
-- Audit history tracking with delta analysis
+
+**IMPLEMENTED** - Full analytics and reporting suite:
+
+#### GP Routine Issue Report
+- **Date ranges**: Last 7 days, 30 days, or custom date range
+- **Sorting**: By issue count or GP name
+- **Display**: GP name, barcode, issue count, last issued date, items breakdown
+- **Export**: CSV download with full GP issue history
+
+#### Items Needed by Size (Weekly Demand)
+- **Lookback period**: Configurable (1-52 weeks, default 4 weeks)
+- **Safety factor**: Adjustable multiplier for stock suggestions (1.0-3.0, default 1.5)
+- **Category filtering**: View demand by specific categories
+- **Metrics**: Total issued, average per week, suggested stock levels
+- **Export**: CSV download with demand analysis
+
+#### Average Item Lifespan by Category
+- **Calculation**: Time from first issue to damaged/lost status
+- **Statistics**: Average, median, min, max lifespan in days
+- **Sample size**: Number of items analyzed per category
+- **Export**: CSV download with lifespan statistics
+
+#### Smart Weekly Audit List Generator
+- **Smart selection**: Generates 3-6 items per week based on:
+  - Past count mismatches (highest priority)
+  - High-frequency items (issued often)
+  - Random items for comprehensive coverage over time
+- **Week tracking**: ISO week format (YYYY-WW)
+- **One per week**: Can only generate once per week
+- **Rationale**: Each item shows why it was selected
+- **Persistence**: Stores audit lists and history in Firebase
+- **Export**: CSV download of current week's audit list
+
+All analytics are:
+- **Studio-scoped**: Limited to selected city/studio
+- **Time-bounded**: Optimized for Firebase Spark plan
+- **Exportable**: CSV downloads for all reports
+- **Real-time**: Based on live Firebase data
 
 ## Prerequisites
 
@@ -233,6 +266,8 @@ The web app reads from and writes to these Firebase Realtime Database paths:
 - `/audit_lists/{cityKey}/{studioKey}/{weekId}` - Weekly audit lists
 - `/audit_history/{cityKey}/{studioKey}/{auditKey}` - Audit history entries
 
+**IMPLEMENTED** - These paths are now actively used by the Analytics feature.
+
 ## CSV Import Format
 
 CSV files for import must include these columns (case-insensitive):
@@ -284,6 +319,36 @@ Date,Action,Details
 2026-02-12T10:00:00Z,ISSUE,Issued 3 item(s) to John Doe: White Shirt; Black Pants; Vest
 ```
 
+### Analytics Exports
+
+#### GP Issue Report Export
+```csv
+GP Name,GP Barcode,Issue Count,Last Issued,Items
+John Doe,GP001,15,2026-02-12T10:00:00Z,White Shirt(5); Black Pants(4); Vest(6)
+```
+
+#### Demand Analysis Export
+```csv
+Item Name,Size,Category,Total Issued,Avg Per Week,Suggested Stock
+White Shirt,M,Shirts,24,6.00,9
+Black Pants,L,Pants,18,4.50,7
+```
+
+#### Lifespan Analysis Export
+```csv
+Category,Avg Lifespan (Days),Median Lifespan (Days),Min,Max,Sample Size
+Shirts,120,115,45,210,24
+Pants,150,145,60,250,18
+```
+
+#### Audit List Export
+```csv
+Barcode,Name,Size,Category,Rationale,Expected Location
+SHIRT001,White Shirt,M,Shirts,Previously had count mismatch,Main Floor
+PANTS002,Black Pants,L,Pants,High issue frequency,Main Floor
+VEST003,Vest,XL,Vests,Random selection for coverage,Main Floor
+```
+
 ## Firebase Spark Plan Optimization
 
 This app is designed to work within Firebase Spark (free tier) limitations:
@@ -298,6 +363,30 @@ This app is designed to work within Firebase Spark (free tier) limitations:
 - **Studio scoping**: All operations and analytics scoped to individual studios, not city-wide
 
 ## Constraints & Design Decisions
+
+### Smart Weekly Audit Algorithm
+
+The smart audit list generator uses a scoring system to select 3-6 items per week:
+
+1. **Priority Scoring**:
+   - Items with past count mismatches: +100 points (highest priority)
+   - High-frequency items (issued often): +frequency count
+   - Random variance: +0-10 points for variety
+
+2. **Selection Strategy**:
+   - Top 60% of items: High-priority items (frequent or with mismatches)
+   - Remaining 40%: Random selection for comprehensive coverage
+   - Total: 3-6 items depending on inventory size
+
+3. **Coverage Over Time**:
+   - Random selection ensures all items are eventually audited
+   - Mix of frequent and infrequent items balances accuracy and coverage
+   - Mismatch tracking improves future selections
+
+4. **Constraints**:
+   - Only In Stock items at selected studio
+   - One audit list per week (prevents re-generation)
+   - Week ID format: YYYY-WW (ISO week number)
 
 ### Client-Side Only
 - No Cloud Functions (Spark plan limitation)
