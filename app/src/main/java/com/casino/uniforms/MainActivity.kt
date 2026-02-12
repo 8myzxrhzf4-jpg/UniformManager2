@@ -120,10 +120,11 @@ class MainActivity : ComponentActivity() {
 
 // Normalize status to canonical values
 fun normalizeStatus(status: String?): String {
-    return when (status?.trim()) {
+    if (status.isNullOrBlank()) return "In Stock"
+    return when (status.trim()) {
         "In Hamper", "Laundry" -> "In Laundry"
         "Issued" -> "Issued"
-        "Damaged", "Lost" -> status // Terminal states
+        "Damaged", "Lost" -> status // Terminal states preserved as-is
         else -> "In Stock"
     }
 }
@@ -299,9 +300,11 @@ fun UniformApp() {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val items = mutableListOf<UniformItem>()
                 snapshot.children.forEach { itemSnap ->
-                    val name = itemSnap.child("name").getValue(String::class.java)
-                    val size = itemSnap.child("size").getValue(String::class.java)
-                    val barcode = itemSnap.child("barcode").getValue(String::class.java)
+                    val name = itemSnap.child("name").getValue(String::class.java) ?: ""
+                    val size = itemSnap.child("size").getValue(String::class.java) ?: ""
+                    val barcode = itemSnap.child("barcode").getValue(String::class.java) ?: ""
+                    // Skip items with missing required fields
+                    if (barcode.isEmpty()) return@forEach
                     val status = itemSnap.child("status").getValue(String::class.java)
                     val category = itemSnap.child("category").getValue(String::class.java) ?: "Other"
                     val studioLocation = itemSnap.child("studioLocation").getValue(String::class.java) ?: ""
@@ -409,6 +412,10 @@ fun UniformApp() {
         }
         
         // Sync to Firebase
+        // Note: Full array overwrites are used for simplicity. For large datasets,
+        // consider using push() for new items and updateChildren() for modifications
+        // to avoid race conditions and improve efficiency.
+        
         // Cities
         cityList.forEach { city ->
             city.studios.forEach { studio ->
@@ -632,7 +639,8 @@ fun UniformApp() {
                                     if (error != null) {
                                         Toast.makeText(context, "Hamper update error: ${error.message}", Toast.LENGTH_SHORT).show()
                                     } else if (committed) {
-                                        studioObj.currentHamperCount = snapshot?.getValue(Int::class.java) ?: studioObj.currentHamperCount + 1
+                                        // Update local state to match Firebase
+                                        studioObj.currentHamperCount = snapshot?.getValue(Int::class.java) ?: 0
                                     }
                                 }
                             })
@@ -680,7 +688,8 @@ fun UniformApp() {
 
                             toLaundry.forEach { item ->
                                 val idx = inventory.indexOf(item)
-                                // Keep status as "In Laundry" during pickup
+                                // Status remains "In Laundry" (already set during return to hamper)
+                                // No status change needed during pickup - items stay in laundry until drop-off
                                 if(idx != -1) inventory[idx] = item.copy(status = "In Laundry")
                             }
 
@@ -1224,7 +1233,8 @@ fun BarcodeScannerView(onBarcodeDetected: (String) -> Unit, onClose: () -> Unit)
                     )
                 } catch (e: Exception) {
                     // Handle potential binding errors
-                    Toast.makeText(context, "Camera error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    android.util.Log.e("BarcodeScannerView", "Camera binding failed", e)
+                    Toast.makeText(context, "Unable to start camera. Please check permissions and try again.", Toast.LENGTH_LONG).show()
                 }
             }, ContextCompat.getMainExecutor(activity))
         }
