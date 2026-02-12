@@ -6,6 +6,7 @@ import { useCities, useInventory, useLogs, useGamePresenters, useAssignments, us
 import { Operations } from './Operations';
 import { ImportExport } from './ImportExport';
 import { HamperManagement } from './HamperManagement';
+import { Analytics } from './Analytics';
 import './Dashboard.css';
 
 interface DashboardProps {
@@ -302,16 +303,14 @@ export function Dashboard({ user }: DashboardProps) {
               )}
 
               {activeView === 'analytics' && (
-                <div className="analytics-placeholder card">
-                  <h2 className="text-accent">Analytics</h2>
-                  <p className="text-muted">Analytics features coming soon...</p>
-                  <ul className="text-muted">
-                    <li>Routinely issued GPs report (7d/30d/custom)</li>
-                    <li>Items needed by size (weekly demand)</li>
-                    <li>Average lifespan by category</li>
-                    <li>Smart weekly audit list generator</li>
-                  </ul>
-                </div>
+                <Analytics
+                  cityKey={selectedCity}
+                  cityName={cities[selectedCity].name}
+                  studioKey={selectedStudio}
+                  studioName={selectedStudioInfo?.name || ''}
+                  inventory={inventory}
+                  assignments={assignments}
+                />
               )}
             </>
           )}
