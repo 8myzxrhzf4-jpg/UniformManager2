@@ -1158,6 +1158,9 @@ fun BarcodeScannerView(onBarcodeDetected: (String) -> Unit, onClose: () -> Unit)
 }
 
 // --- CSV UTILS ---
+// NOTE: CSV parsing uses simple split(",") and does not handle quoted fields or commas within values.
+// For best results, field values should not contain commas.
+// Future enhancement: Consider using RFC 4180 compliant CSV parser library (e.g., OpenCSV, Apache Commons CSV)
 
 fun importInventoryCsv(context: Context, uri: Uri, currentInventory: SnapshotStateList<UniformItem>, city: String, studio: String, onDone: () -> Unit) {
     try {

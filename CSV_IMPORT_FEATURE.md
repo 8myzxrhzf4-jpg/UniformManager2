@@ -3,6 +3,20 @@
 ## Overview
 This document describes the CSV import/export feature implemented in the UniformManager2 Android app.
 
+## Important Notes
+
+### CSV Format Limitations
+The current implementation uses a simple comma-separated parsing approach. For best results:
+- **Avoid commas** in field values (e.g., use "John Smith" not "Smith, John")
+- If commas are required in data, consider using semicolons or other delimiters
+- Fields are not quote-aware during import (though export quotes fields)
+- Future enhancement: Consider implementing RFC 4180 compliant CSV parsing library
+
+### Field Value Restrictions
+- **Barcode/ID card**: Should not contain commas
+- **Names**: Avoid commas (use "FirstName LastName" format)
+- **Status/City/Studio**: Use simple text without special characters
+
 ## UI Flow
 
 ### Main Dashboard

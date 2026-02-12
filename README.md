@@ -78,6 +78,12 @@ UniformManager2 is a Spring Boot + Android (Jetpack Compose) project for trackin
 
 ## CSV Import Format Specifications
 
+### Important Notes
+⚠️ **CSV Format Limitations**: The current implementation uses simple comma-separated parsing. To ensure successful imports:
+- **Avoid commas** in field values (use "John Smith" not "Smith, John")
+- Use simple text without special characters in names and identifiers
+- If your data contains commas, consider using alternative formats or cleaning data before import
+
 ### Inventory Import
 **Required Columns** (case-insensitive):
 - `ITEM` - Name of the uniform item (e.g., "Dealer Jacket", "Floor Manager Vest")
