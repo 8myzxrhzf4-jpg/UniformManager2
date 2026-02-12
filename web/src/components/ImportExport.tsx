@@ -285,7 +285,7 @@ function ImportCSV({ cityKey, studioKey, studioName, inventory, gamePresenters, 
     setMessage(null);
 
     try {
-      const updates: Record<string, any> = {};
+      const updates: Record<string, object> = {};
       const timestamp = new Date().toISOString();
       
       if (importType === 'inventory') {
