@@ -1274,7 +1274,6 @@ fun importInventoryCsv(context: Context, uri: Uri, currentInventory: SnapshotSta
         Toast.makeText(context, "Import failed: ${e.message}", Toast.LENGTH_LONG).show()
     }
 }
-}
 
 fun importGPCsv(context: Context, uri: Uri, currentGps: SnapshotStateList<GamePresenter>, onDone: () -> Unit) {
     var imported = 0
