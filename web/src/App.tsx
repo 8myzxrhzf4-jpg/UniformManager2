@@ -35,7 +35,7 @@ function App() {
       {user ? (
         <Dashboard user={user} />
       ) : (
-        <Auth onSignIn={() => {}} />
+        <Auth />
       )}
     </>
   );

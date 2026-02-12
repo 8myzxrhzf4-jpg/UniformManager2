@@ -8,11 +8,7 @@ import {
 import { auth, googleProvider } from '../firebaseClient';
 import './Auth.css';
 
-interface AuthProps {
-  onSignIn: () => void;
-}
-
-export function Auth({ onSignIn }: AuthProps) {
+export function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -30,7 +26,6 @@ export function Auth({ onSignIn }: AuthProps) {
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
-      onSignIn();
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
     } finally {
@@ -44,7 +39,6 @@ export function Auth({ onSignIn }: AuthProps) {
 
     try {
       await signInWithPopup(auth, googleProvider);
-      onSignIn();
     } catch (err: any) {
       setError(err.message || 'Google sign-in failed');
     } finally {
