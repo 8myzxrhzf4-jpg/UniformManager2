@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "636021308819",
+    "firebase_url": "https://uniform-pro-8b5f6-default-rtdb.firebaseio.com",
+    "project_id": "uniform-pro-8b5f6",
+    "storage_bucket": "uniform-pro-8b5f6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:636021308819:android:c3d4402142d7b668a2fc66",
+        "android_client_info": {
+          "package_name": "com.casino.uniforms"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBRFVkGEMkIunH8PqfPgkHugQW09kYM3Wk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

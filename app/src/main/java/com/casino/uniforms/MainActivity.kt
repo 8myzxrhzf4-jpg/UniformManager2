@@ -39,9 +39,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import com.google.firebase.database.*
-import com.google.firebase.database.ktx.database
-import com.google.firebase.ktx.Firebase
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
@@ -51,7 +48,6 @@ import com.google.mlkit.vision.common.InputImage
 import java.io.*
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.Executors
 
 // --- DATA MODELS ---
 
@@ -88,8 +84,7 @@ data class Assignment(
     val size: String,
     val date: String,
     val itemBarcode: String,
-    val studio: String,
-    var pushKey: String? = null  // Firebase push key for reliable deletion
+    val studio: String
 )
 
 data class AuditEntry(val date: String, val action: String, val details: String)
@@ -117,17 +112,6 @@ class MainActivity : ComponentActivity() {
 }
 
 // --- CORE UTILS ---
-
-// Normalize status to canonical values
-fun normalizeStatus(status: String?): String {
-    if (status.isNullOrBlank()) return "In Stock"
-    return when (status.trim()) {
-        "In Hamper", "Laundry" -> "In Laundry"
-        "Issued" -> "Issued"
-        "Damaged", "Lost" -> status // Terminal states preserved as-is
-        else -> "In Stock"
-    }
-}
 
 fun determineCategory(name: String): String {
     val n = name.uppercase()
@@ -232,177 +216,17 @@ fun UniformApp() {
     var menuExpanded by remember { mutableStateOf(false) }
     var pendingDiffs by remember { mutableStateOf<List<AuditDiff>>(emptyList()) }
 
-    // --- FIREBASE INTEGRATION ---
-    val database = remember { Firebase.database.reference }
-    
-    // Firebase listener for cities (global)
-    DisposableEffect(Unit) {
-        val citiesListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val cities = mutableListOf<City>()
-                snapshot.children.forEach { citySnap ->
-                    val cityName = citySnap.key ?: return@forEach
-                    val studiosList = mutableListOf<Studio>()
-                    citySnap.child("studios").children.forEach { studioSnap ->
-                        val studioName = studioSnap.key ?: return@forEach
-                        val capacity = studioSnap.child("hamperCapacity").getValue(Int::class.java) ?: 50
-                        val count = studioSnap.child("currentHamperCount").getValue(Int::class.java) ?: 0
-                        studiosList.add(Studio(studioName, capacity, count))
-                    }
-                    cities.add(City(cityName, studiosList))
-                }
-                if (cities.isNotEmpty()) {
-                    cityList.clear()
-                    cityList.addAll(cities)
-                }
-            }
-            override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(context, "Firebase Error: ${error.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-        database.child("cities").addValueEventListener(citiesListener)
-        onDispose {
-            database.child("cities").removeEventListener(citiesListener)
-        }
-    }
-
-    // Firebase listener for game presenters (global)
-    DisposableEffect(Unit) {
-        val gpsListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val gps = mutableListOf<GamePresenter>()
-                snapshot.children.forEach { gpSnap ->
-                    val name = gpSnap.child("name").getValue(String::class.java) ?: return@forEach
-                    val barcode = gpSnap.child("barcode").getValue(String::class.java) ?: return@forEach
-                    gps.add(GamePresenter(name, barcode))
-                }
-                if (gps.isNotEmpty()) {
-                    gpList.clear()
-                    gpList.addAll(gps)
-                }
-            }
-            override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(context, "Firebase Error: ${error.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-        database.child("game_presenters").addValueEventListener(gpsListener)
-        onDispose {
-            database.child("game_presenters").removeEventListener(gpsListener)
-        }
-    }
-
-    // Firebase listeners for city-scoped data (rebind when city changes)
-    DisposableEffect(selectedCityName) {
-        val cityPath = "cities/$selectedCityName"
-        
-        // Inventory listener
-        val invListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val items = mutableListOf<UniformItem>()
-                snapshot.children.forEach { itemSnap ->
-                    val name = itemSnap.child("name").getValue(String::class.java) ?: ""
-                    val size = itemSnap.child("size").getValue(String::class.java) ?: ""
-                    val barcode = itemSnap.child("barcode").getValue(String::class.java) ?: ""
-                    // Skip items with missing required fields
-                    if (barcode.isEmpty()) return@forEach
-                    val status = itemSnap.child("status").getValue(String::class.java)
-                    val category = itemSnap.child("category").getValue(String::class.java) ?: "Other"
-                    val studioLocation = itemSnap.child("studioLocation").getValue(String::class.java) ?: ""
-                    items.add(UniformItem(name, size, barcode, normalizeStatus(status), category, studioLocation))
-                }
-                inventory.clear()
-                inventory.addAll(items)
-            }
-            override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(context, "Inventory Error: ${error.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-        
-        // Assignments listener
-        val assignListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val assigns = mutableListOf<Assignment>()
-                snapshot.children.forEach { assignSnap ->
-                    val id = assignSnap.child("id").getValue(String::class.java) ?: UUID.randomUUID().toString()
-                    val gpName = assignSnap.child("gpName").getValue(String::class.java) ?: return@forEach
-                    val itemName = assignSnap.child("itemName").getValue(String::class.java) ?: ""
-                    val size = assignSnap.child("size").getValue(String::class.java) ?: ""
-                    val date = assignSnap.child("date").getValue(String::class.java) ?: ""
-                    val itemBarcode = assignSnap.child("itemBarcode").getValue(String::class.java) ?: ""
-                    val studio = assignSnap.child("studio").getValue(String::class.java) ?: ""
-                    val pushKey = assignSnap.key // Store Firebase push key
-                    assigns.add(Assignment(id, gpName, itemName, size, date, itemBarcode, studio, pushKey))
-                }
-                assignments.clear()
-                assignments.addAll(assigns)
-            }
-            override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(context, "Assignments Error: ${error.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-        
-        // Laundry orders listener
-        val laundryListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val orders = mutableListOf<LaundryOrder>()
-                snapshot.children.forEach { orderSnap ->
-                    val id = orderSnap.child("id").getValue(String::class.java) ?: return@forEach
-                    val items = orderSnap.child("items").children.mapNotNull { it.getValue(String::class.java) }
-                    val originStudio = orderSnap.child("originStudio").getValue(String::class.java) ?: ""
-                    val timestamp = orderSnap.child("timestamp").getValue(String::class.java) ?: ""
-                    orders.add(LaundryOrder(id, items, originStudio, timestamp))
-                }
-                laundryOrders.clear()
-                laundryOrders.addAll(orders)
-            }
-            override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(context, "Laundry Error: ${error.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-        
-        // Logs listener
-        val logsListener = object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                val logs = mutableListOf<AuditEntry>()
-                snapshot.children.forEach { logSnap ->
-                    val date = logSnap.child("date").getValue(String::class.java) ?: return@forEach
-                    val action = logSnap.child("action").getValue(String::class.java) ?: ""
-                    val details = logSnap.child("details").getValue(String::class.java) ?: ""
-                    logs.add(AuditEntry(date, action, details))
-                }
-                auditLogs.clear()
-                auditLogs.addAll(logs)
-            }
-            override fun onCancelled(error: DatabaseError) {
-                Toast.makeText(context, "Logs Error: ${error.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-        
-        database.child("$cityPath/inventory").addValueEventListener(invListener)
-        database.child("$cityPath/assignments").addValueEventListener(assignListener)
-        database.child("$cityPath/laundry_orders").addValueEventListener(laundryListener)
-        database.child("$cityPath/logs").addValueEventListener(logsListener)
-        
-        onDispose {
-            database.child("$cityPath/inventory").removeEventListener(invListener)
-            database.child("$cityPath/assignments").removeEventListener(assignListener)
-            database.child("$cityPath/laundry_orders").removeEventListener(laundryListener)
-            database.child("$cityPath/logs").removeEventListener(logsListener)
-        }
-    }
-
     // --- LOGIC FUNCTIONS ---
 
     fun saveData() {
         val gson = Gson()
-        val database = Firebase.database.reference
-        
-        // Save to SharedPreferences for offline access (local cache)
         prefs.edit().apply {
             putString("city_map", gson.toJson(cityList.toList()))
             putString("gps", gson.toJson(gpList.toList()))
             putString("selected_city", selectedCityName)
             putString("selected_studio", selectedStudioName)
+
+            // City Scoped Data
             putString("${selectedCityName}_inv", gson.toJson(inventory.toList()))
             putString("${selectedCityName}_assign", gson.toJson(assignments.toList()))
             putString("${selectedCityName}_laundry_orders", gson.toJson(laundryOrders.toList()))
@@ -410,36 +234,6 @@ fun UniformApp() {
             putString("${selectedCityName}_return_studio", laundryReturnStudio)
             apply()
         }
-        
-        // Sync to Firebase
-        // Note: Full array overwrites are used for simplicity. For large datasets,
-        // consider using push() for new items and updateChildren() for modifications
-        // to avoid race conditions and improve efficiency.
-        
-        // Cities
-        cityList.forEach { city ->
-            city.studios.forEach { studio ->
-                database.child("cities/${city.name}/studios/${studio.name}").setValue(
-                    mapOf("hamperCapacity" to studio.hamperCapacity, "currentHamperCount" to studio.currentHamperCount)
-                )
-            }
-        }
-        
-        // Game Presenters (global)
-        database.child("game_presenters").setValue(gpList.map { mapOf("name" to it.name, "barcode" to it.barcode) })
-        
-        // City-scoped data
-        val cityPath = "cities/$selectedCityName"
-        database.child("$cityPath/inventory").setValue(inventory.map { 
-            mapOf("name" to it.name, "size" to it.size, "barcode" to it.barcode, 
-                  "status" to it.status, "category" to it.category, "studioLocation" to it.studioLocation) 
-        })
-        database.child("$cityPath/laundry_orders").setValue(laundryOrders.map { 
-            mapOf("id" to it.id, "items" to it.items, "originStudio" to it.originStudio, "timestamp" to it.timestamp) 
-        })
-        database.child("$cityPath/logs").setValue(auditLogs.map { 
-            mapOf("date" to it.date, "action" to it.action, "details" to it.details) 
-        })
     }
 
     fun addLog(action: String, details: String) {
@@ -576,93 +370,45 @@ fun UniformApp() {
 
                 // --- ISSUE SCREEN (Scoped to Studio) ---
                 "scan_issue" -> IssueSessionScreen(gpList, inventory, selectedStudioName, onFinish = { staff, items ->
-                    val database = Firebase.database.reference
                     items.forEach { item ->
                         val idx = inventory.indexOfFirst { it.barcode == item.barcode }
                         if (idx != -1) inventory[idx] = inventory[idx].copy(status = "Issued")
 
-                        // Create assignment with push() to get pushKey
-                        val assignmentRef = database.child("cities/$selectedCityName/assignments").push()
-                        val newAssignment = Assignment(
+                        assignments.add(Assignment(
                             gpName = staff.name,
                             itemName = item.name ?: "",
                             size = item.size ?: "",
                             date = SimpleDateFormat("MM/dd HH:mm").format(Date()),
                             itemBarcode = item.barcode ?: "",
-                            studio = selectedStudioName,
-                            pushKey = assignmentRef.key
-                        )
-                        assignmentRef.setValue(mapOf(
-                            "id" to newAssignment.id,
-                            "gpName" to newAssignment.gpName,
-                            "itemName" to newAssignment.itemName,
-                            "size" to newAssignment.size,
-                            "date" to newAssignment.date,
-                            "itemBarcode" to newAssignment.itemBarcode,
-                            "studio" to newAssignment.studio
+                            studio = selectedStudioName
                         ))
-                        assignments.add(newAssignment)
                         addLog("ISSUE", "${staff.name} | ${item.name} @ $selectedStudioName")
                     }
                     saveData()
                     activeScreen = "home"
                 }, onCancel = { activeScreen = "home" })
 
-                // --- RETURN SCREEN (To Laundry) ---
+                // --- RETURN SCREEN (To Hamper) ---
                 "scan_return" -> ReturnSessionScreen(gpList, assignments, inventory, { assign ->
                     val itemIndex = inventory.indexOfFirst { it.barcode == assign.itemBarcode }
                     if (itemIndex != -1) {
                         val item = inventory[itemIndex]
-                        val database = Firebase.database.reference
 
-                        // Check Hamper Capacity (soft warning)
+                        // Check Hamper Capacity
                         val cityObj = cityList.find { it.name == selectedCityName }
                         val studioObj = cityObj?.studios?.find { it.name == selectedStudioName }
 
                         if (studioObj != null) {
                             if (studioObj.currentHamperCount >= studioObj.hamperCapacity) {
-                                Toast.makeText(context, "WARNING: Hamper at/over capacity!", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "HAMPER FULL!", Toast.LENGTH_LONG).show()
                             }
 
-                            // Use canonical status "In Laundry" (was "In Hamper")
-                            inventory[itemIndex] = item.copy(status = "In Laundry", studioLocation = selectedStudioName)
-                            
-                            // Use Firebase transaction to safely increment hamper count
-                            val hamperRef = database.child("cities/$selectedCityName/studios/${selectedStudioName}/currentHamperCount")
-                            hamperRef.runTransaction(object : Transaction.Handler {
-                                override fun doTransaction(currentData: MutableData): Transaction.Result {
-                                    val currentCount = currentData.getValue(Int::class.java) ?: 0
-                                    currentData.value = currentCount + 1
-                                    return Transaction.success(currentData)
-                                }
-                                override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
-                                    if (error != null) {
-                                        Toast.makeText(context, "Hamper update error: ${error.message}", Toast.LENGTH_SHORT).show()
-                                    } else if (committed) {
-                                        // Update local state to match Firebase
-                                        studioObj.currentHamperCount = snapshot?.getValue(Int::class.java) ?: 0
-                                    }
-                                }
-                            })
+                            // Move to Hamper
+                            inventory[itemIndex] = item.copy(status = "In Hamper", studioLocation = selectedStudioName)
+                            studioObj.currentHamperCount++
 
-                            // Delete assignment using pushKey if available, fallback to id-based query
-                            if (assign.pushKey != null) {
-                                database.child("cities/$selectedCityName/assignments/${assign.pushKey}").removeValue()
-                            } else {
-                                // Fallback: query by id
-                                database.child("cities/$selectedCityName/assignments")
-                                    .orderByChild("id").equalTo(assign.id)
-                                    .addListenerForSingleValueEvent(object : ValueEventListener {
-                                        override fun onDataChange(snapshot: DataSnapshot) {
-                                            snapshot.children.firstOrNull()?.ref?.removeValue()
-                                        }
-                                        override fun onCancelled(error: DatabaseError) {
-                                            Toast.makeText(context, "Delete error: ${error.message}", Toast.LENGTH_SHORT).show()
-                                        }
-                                    })
-                            }
                             assignments.remove(assign)
-                            addLog("RETURN", "${assign.gpName} | ${assign.itemName} -> Laundry")
+                            addLog("RETURN", "${assign.gpName} | ${assign.itemName} -> Hamper")
                             saveData()
                         }
                     }
@@ -679,36 +425,17 @@ fun UniformApp() {
                         saveData()
                     },
                     onPickUp = { studio ->
-                        val database = Firebase.database.reference
-                        // Use canonical status "In Laundry" (was "In Hamper")
-                        val toLaundry = inventory.filter { it.status == "In Laundry" && it.studioLocation == studio.name }
+                        val toLaundry = inventory.filter { it.status == "In Hamper" && it.studioLocation == studio.name }
                         if (toLaundry.isNotEmpty()) {
                             val orderId = "ORD-${System.currentTimeMillis() % 10000}"
                             val order = LaundryOrder(orderId, toLaundry.map { it.barcode!! }, studio.name, SimpleDateFormat("MM/dd HH:mm").format(Date()))
 
                             toLaundry.forEach { item ->
                                 val idx = inventory.indexOf(item)
-                                // Status remains "In Laundry" (already set during return to hamper)
-                                // No status change needed during pickup - items stay in laundry until drop-off
-                                if(idx != -1) inventory[idx] = item.copy(status = "In Laundry")
+                                if(idx != -1) inventory[idx] = item.copy(status = "Laundry")
                             }
 
-                            // Use Firebase transaction to reset hamper count
-                            val hamperRef = database.child("cities/$selectedCityName/studios/${studio.name}/currentHamperCount")
-                            hamperRef.runTransaction(object : Transaction.Handler {
-                                override fun doTransaction(currentData: MutableData): Transaction.Result {
-                                    currentData.value = 0
-                                    return Transaction.success(currentData)
-                                }
-                                override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
-                                    if (error != null) {
-                                        Toast.makeText(context, "Hamper reset error: ${error.message}", Toast.LENGTH_SHORT).show()
-                                    } else if (committed) {
-                                        studio.currentHamperCount = 0
-                                    }
-                                }
-                            })
-                            
+                            studio.currentHamperCount = 0
                             laundryOrders.add(order)
                             addLog("LAUNDRY", "Pick Up: $orderId from ${studio.name}")
                             saveData()
@@ -942,24 +669,7 @@ fun LocationAdminDialog(cityList: List<City>, onDismiss: () -> Unit, onSave: (Li
                 }
             }
         },
-        confirmButton = { Button(onClick = { 
-            // Save entire cities map to Firebase to allow deletions
-            val database = Firebase.database.reference
-            // Clear existing cities and write the entire updated structure
-            database.child("cities").setValue(
-                tempCities.associate { city ->
-                    city.name to mapOf(
-                        "studios" to city.studios.associate { studio ->
-                            studio.name to mapOf(
-                                "hamperCapacity" to studio.hamperCapacity,
-                                "currentHamperCount" to studio.currentHamperCount
-                            )
-                        }
-                    )
-                }
-            )
-            onSave(tempCities) 
-        }) { Text("Save Changes") } }
+        confirmButton = { Button(onClick = { onSave(tempCities) }) { Text("Save Changes") } }
     )
 }
 
@@ -1177,75 +887,49 @@ fun BarcodeScannerView(onBarcodeDetected: (String) -> Unit, onClose: () -> Unit)
                 .build()
         )
     }
-    // Background executor for image analysis to avoid ANR
-    val backgroundExecutor = remember { Executors.newSingleThreadExecutor() }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            // Unbind all CameraX use cases before closing resources
-            runCatching {
-                val activity = context.findActivity()
-                if (activity != null) {
-                    ProcessCameraProvider.getInstance(activity).get().unbindAll()
-                }
-            }.onFailure { e ->
-                android.util.Log.w("BarcodeScannerView", "Failed to unbind camera provider during disposal", e)
-            }
-            scanner.close()
-            backgroundExecutor.shutdown()
-        }
-    }
 
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { previewView }, Modifier.fillMaxSize())
 
         LaunchedEffect(Unit) {
             val activity = context.findActivity() ?: return@LaunchedEffect
-            
-            // Obtain camera provider in background to avoid blocking main thread
-            val cameraProviderFuture = ProcessCameraProvider.getInstance(activity)
-            cameraProviderFuture.addListener({
-                try {
-                    val cameraProvider = cameraProviderFuture.get()
+            val cameraProvider = ProcessCameraProvider.getInstance(activity).get()
 
-                    val preview = Preview.Builder()
-                        .build()
-                        .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+            val preview = Preview.Builder()
+                .build()
+                .also { it.setSurfaceProvider(previewView.surfaceProvider) }
 
-                    // Performance optimized image analysis
-                    val imageAnalysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .setTargetResolution(android.util.Size(640, 480))
-                        .build()
+            // Performance Optimized Snippet Integrated
+            val imageAnalysis = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .setTargetResolution(android.util.Size(640, 480))
+                .build()
 
-                    // Use background executor to avoid main thread blocking
-                    imageAnalysis.setAnalyzer(backgroundExecutor) { proxy ->
-                        proxy.image?.let { img ->
-                            val image = InputImage.fromMediaImage(img, proxy.imageInfo.rotationDegrees)
-                            scanner.process(image)
-                                .addOnSuccessListener { barcodes ->
-                                    barcodes.firstOrNull()?.rawValue?.let { onBarcodeDetected(it) }
-                                }
-                                .addOnCompleteListener {
-                                    proxy.close()
-                                }
-                        } ?: proxy.close()
-                    }
+            imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(activity)) { proxy ->
+                proxy.image?.let { img ->
+                    val image = InputImage.fromMediaImage(img, proxy.imageInfo.rotationDegrees)
+                    scanner.process(image)
+                        .addOnSuccessListener { barcodes ->
+                            barcodes.firstOrNull()?.rawValue?.let { onBarcodeDetected(it) }
+                        }
+                        .addOnCompleteListener {
+                            proxy.close()
+                        }
+                } ?: proxy.close()
+            }
 
-                    // Unbind everything before binding to prevent "Camera already in use" crashes
-                    cameraProvider.unbindAll()
-                    cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        CameraSelector.DEFAULT_BACK_CAMERA,
-                        preview,
-                        imageAnalysis
-                    )
-                } catch (e: Exception) {
-                    // Handle potential binding errors
-                    android.util.Log.e("BarcodeScannerView", "Camera binding failed", e)
-                    Toast.makeText(context, "Unable to start camera. Please check permissions and try again.", Toast.LENGTH_LONG).show()
-                }
-            }, ContextCompat.getMainExecutor(activity))
+            try {
+                // Unbind everything before binding to prevent "Camera already in use" crashes
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(
+                    lifecycleOwner,
+                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    preview,
+                    imageAnalysis
+                )
+            } catch (e: Exception) {
+                // Handle potential binding errors
+            }
         }
 
         IconButton(
@@ -1260,8 +944,6 @@ fun BarcodeScannerView(onBarcodeDetected: (String) -> Unit, onClose: () -> Unit)
 // --- CSV UTILS ---
 
 fun importInventoryCsv(context: Context, uri: Uri, currentInventory: SnapshotStateList<UniformItem>, city: String, studio: String, onDone: () -> Unit) {
-    var imported = 0
-    var duplicates = 0
     try {
         context.contentResolver.openInputStream(uri)?.use { s ->
             BufferedReader(InputStreamReader(s)).use { r ->
@@ -1269,33 +951,19 @@ fun importInventoryCsv(context: Context, uri: Uri, currentInventory: SnapshotSta
                 var line: String?
                 while (r.readLine().also { line = it } != null) {
                     val p = line!!.split(",")
-                    if (p.size >= 3) {
-                        val barcode = p[2].trim()
-                        if (!currentInventory.any { it.barcode == barcode }) {
-                            val name = p[0].trim()
-                            currentInventory.add(UniformItem(name, p[1].trim(), barcode, "In Stock", determineCategory(name), studio))
-                            imported++
-                        } else {
-                            duplicates++
-                        }
+                    if (p.size >= 3 && !currentInventory.any { it.barcode == p[2].trim() }) {
+                        val name = p[0].trim()
+                        // Force import into currently selected city/studio
+                        currentInventory.add(UniformItem(name, p[1].trim(), p[2].trim(), "In Stock", determineCategory(name), studio))
                     }
                 }
             }
         }
-        val message = if (duplicates > 0) {
-            "Imported $imported items, skipped $duplicates duplicates"
-        } else {
-            "Imported $imported items"
-        }
-        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         onDone()
-    } catch (e: Exception) {
-        Toast.makeText(context, "Import failed: ${e.message}", Toast.LENGTH_LONG).show()
-    }
+    } catch (e: Exception) { }
 }
 
 fun importGPCsv(context: Context, uri: Uri, currentGps: SnapshotStateList<GamePresenter>, onDone: () -> Unit) {
-    var imported = 0
     try {
         context.contentResolver.openInputStream(uri)?.use { s ->
             BufferedReader(InputStreamReader(s)).use { r ->
@@ -1303,18 +971,12 @@ fun importGPCsv(context: Context, uri: Uri, currentGps: SnapshotStateList<GamePr
                 var line: String?
                 while (r.readLine().also { line = it } != null) {
                     val p = line!!.split(",")
-                    if (p.size >= 2) {
-                        currentGps.add(GamePresenter(p[0].trim(), p[1].trim()))
-                        imported++
-                    }
+                    if (p.size >= 2) currentGps.add(GamePresenter(p[0].trim(), p[1].trim()))
                 }
             }
         }
-        Toast.makeText(context, "Imported $imported game presenters", Toast.LENGTH_SHORT).show()
         onDone()
-    } catch (e: Exception) {
-        Toast.makeText(context, "GP import failed: ${e.message}", Toast.LENGTH_SHORT).show()
-    }
+    } catch (e: Exception) { }
 }
 
 fun exportInventoryCsv(context: Context, uri: Uri, inventory: List<UniformItem>, city: String, studio: String) {
