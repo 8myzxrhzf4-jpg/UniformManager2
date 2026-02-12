@@ -1,0 +1,57 @@
+.operations-container {
+  margin-bottom: var(--spacing-lg);
+}
+
+.operations-container h2 {
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.tab-content {
+  padding-top: var(--spacing-md);
+}
+
+.operation-content h3 {
+  margin: 0 0 var(--spacing-sm) 0;
+  color: var(--color-text-primary);
+  font-size: 1.125rem;
+}
+
+.item-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm);
+  background-color: var(--color-bg-tertiary);
+}
+
+.item-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-fast);
+}
+
+.item-checkbox:hover {
+  background-color: var(--color-bg-secondary);
+}
+
+.item-checkbox input[type="checkbox"] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+}
+
+.item-checkbox span {
+  color: var(--color-text-primary);
+  font-size: 0.9375rem;
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
