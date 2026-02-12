@@ -59,3 +59,13 @@ UniformManager2 is a Spring Boot + Android (Jetpack Compose) project for trackin
 - Merge soft-limit hamper handling with warnings and decrement on pickups.
 - Merge status alignment/validation/security PR.
 - Align Android status vocabulary with backend.
+
+## Recent Changes
+
+### Post-Firebase Migration Cleanup (2026-02-12)
+- Removed unused web application hooks and types (useGamePresenters, useAssignments, useLaundryOrders)
+- Updated documentation to clarify CSV import/export as primary bulk data path
+- Web dashboard remains as read-only Firebase viewer for inventory and logs
+- Android app retains all CSV operations: import/export inventory, game presenters, issued items, logs, and audit reports
+- Spring Boot backend continues to provide REST API alongside Firebase real-time sync
+- All camera/barcode scanning functionality preserved as core app feature

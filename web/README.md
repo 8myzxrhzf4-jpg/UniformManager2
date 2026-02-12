@@ -149,14 +149,13 @@ This serves the production build locally for testing.
 
 ## Data Model
 
-The web app reads from these Firebase Realtime Database paths:
+The web app currently reads from these Firebase Realtime Database paths:
 
 - `/cities` - City and studio definitions
-- `/gps` - Game presenters (staff members)
 - `/inventory/{city}` - Uniform items per city
-- `/assignments/{city}` - Assignment records per city
-- `/laundry_orders/{city}` - Laundry order records per city
 - `/logs/{city}/{studio}` - Activity logs per city/studio (limited to last 100)
+
+> **Note**: The data model also includes `/gps`, `/assignments/{city}`, and `/laundry_orders/{city}` paths, but these are not currently displayed in the web dashboard. They are actively used by the Android mobile app.
 
 ### Sample Data Structure
 
