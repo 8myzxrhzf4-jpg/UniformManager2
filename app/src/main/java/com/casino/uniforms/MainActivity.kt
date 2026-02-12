@@ -1385,7 +1385,10 @@ fun saveSkippedRowsLog(context: Context, skippedRows: List<SkippedRow>, fileName
         file.bufferedWriter().use { writer ->
             writer.write("Row Number,Data,Reason\n")
             skippedRows.forEach { row ->
-                writer.write("${row.rowNumber},\"${row.data}\",\"${row.reason}\"\n")
+                // Escape quotes in CSV fields by doubling them
+                val escapedData = row.data.replace("\"", "\"\"")
+                val escapedReason = row.reason.replace("\"", "\"\"")
+                writer.write("${row.rowNumber},\"${escapedData}\",\"${escapedReason}\"\n")
             }
         }
         Toast.makeText(context, "Skipped rows log saved to Downloads/$fileName", Toast.LENGTH_LONG).show()
