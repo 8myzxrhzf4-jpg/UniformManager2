@@ -1182,6 +1182,15 @@ fun BarcodeScannerView(onBarcodeDetected: (String) -> Unit, onClose: () -> Unit)
 
     DisposableEffect(Unit) {
         onDispose {
+            // Unbind all CameraX use cases before closing resources
+            runCatching {
+                val activity = context.findActivity()
+                if (activity != null) {
+                    ProcessCameraProvider.getInstance(activity).get().unbindAll()
+                }
+            }.onFailure { e ->
+                android.util.Log.w("BarcodeScannerView", "Failed to unbind camera provider during disposal", e)
+            }
             scanner.close()
             backgroundExecutor.shutdown()
         }
