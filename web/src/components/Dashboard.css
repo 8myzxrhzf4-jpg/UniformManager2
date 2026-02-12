@@ -269,6 +269,33 @@
   line-height: 1.4;
 }
 
+.view-tabs {
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-md);
+}
+
+.view-tabs .tabs {
+  margin: 0;
+}
+
+.analytics-placeholder {
+  padding: var(--spacing-xl);
+}
+
+.analytics-placeholder h2 {
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.analytics-placeholder ul {
+  margin: var(--spacing-md) 0;
+  padding-left: var(--spacing-xl);
+}
+
+.analytics-placeholder li {
+  margin-bottom: var(--spacing-sm);
+  line-height: 1.6;
+}
+
 @media (max-width: 768px) {
   .dashboard-content {
     flex-direction: column;

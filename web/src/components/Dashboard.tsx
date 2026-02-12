@@ -2,7 +2,10 @@ import { useState, useMemo } from 'react';
 import { signOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { auth } from '../firebaseClient';
-import { useCities, useInventory, useLogs } from '../hooks';
+import { useCities, useInventory, useLogs, useGamePresenters, useAssignments, useLaundryOrders } from '../hooks';
+import { Operations } from './Operations';
+import { ImportExport } from './ImportExport';
+import { HamperManagement } from './HamperManagement';
 import './Dashboard.css';
 
 interface DashboardProps {
@@ -13,9 +16,13 @@ export function Dashboard({ user }: DashboardProps) {
   const { cities, loading: citiesLoading } = useCities();
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [selectedStudio, setSelectedStudio] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<'inventory' | 'operations' | 'import-export' | 'analytics'>('inventory');
   
   const { inventory, loading: inventoryLoading } = useInventory(selectedCity);
   const { logs, loading: logsLoading } = useLogs(selectedCity, selectedStudio);
+  const { gps } = useGamePresenters();
+  const { assignments } = useAssignments(selectedCity);
+  const { laundryOrders } = useLaundryOrders(selectedCity);
 
   // Get list of cities
   const cityList = useMemo(() => {
@@ -61,6 +68,12 @@ export function Dashboard({ user }: DashboardProps) {
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       });
   }, [logs]);
+
+  // Get selected studio info
+  const selectedStudioInfo = useMemo(() => {
+    if (!selectedCity || !selectedStudio || !cities[selectedCity]) return null;
+    return cities[selectedCity].studios[selectedStudio];
+  }, [cities, selectedCity, selectedStudio]);
 
   const handleSignOut = async () => {
     try {
@@ -144,74 +157,161 @@ export function Dashboard({ user }: DashboardProps) {
           {!selectedCity ? (
             <div className="empty-state">
               <h2>Welcome to Uniform Manager</h2>
-              <p>Select a city from the sidebar to view inventory and logs.</p>
+              <p>Select a city from the sidebar to view inventory and manage operations.</p>
+            </div>
+          ) : !selectedStudio ? (
+            <div className="empty-state">
+              <h2>Select a Studio</h2>
+              <p>Please select a studio to view inventory and perform operations.</p>
             </div>
           ) : (
             <>
-              <section className="inventory-section">
-                <h2>Inventory</h2>
-                {inventoryLoading ? (
-                  <p>Loading inventory...</p>
-                ) : inventoryItems.length === 0 ? (
-                  <p className="empty-message">
-                    No inventory items found for this location.
-                  </p>
-                ) : (
-                  <div className="table-container">
-                    <table className="data-table">
-                      <thead>
-                        <tr>
-                          <th>Name</th>
-                          <th>Size</th>
-                          <th>Barcode</th>
-                          <th>Status</th>
-                          <th>Studio Location</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {inventoryItems.map((item) => (
-                          <tr key={item.key}>
-                            <td>{item.name}</td>
-                            <td>{item.size}</td>
-                            <td>
-                              <code className="barcode">{item.barcode}</code>
-                            </td>
-                            <td>
-                              <span className={`status-badge status-${item.status?.toLowerCase().replace(/\s+/g, '-')}`}>
-                                {item.status}
-                              </span>
-                            </td>
-                            <td>{item.studioLocation}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
+              {/* Hamper Management */}
+              {selectedStudioInfo && (
+                <HamperManagement
+                  cityKey={selectedCity}
+                  cityName={cities[selectedCity].name}
+                  studioKey={selectedStudio}
+                  studioName={selectedStudioInfo.name}
+                  hamperCapacity={selectedStudioInfo.hamperCapacity}
+                  currentHamperCount={selectedStudioInfo.currentHamperCount}
+                />
+              )}
 
-              {selectedStudio && (
-                <section className="logs-section">
-                  <h2>Activity Logs</h2>
-                  <p className="section-description">Last 100 entries, most recent first</p>
-                  {logsLoading ? (
-                    <p>Loading logs...</p>
-                  ) : logEntries.length === 0 ? (
-                    <p className="empty-message">No logs found for this location.</p>
-                  ) : (
-                    <div className="logs-list">
-                      {logEntries.map((log) => (
-                        <div key={log.key} className="log-entry">
-                          <div className="log-header">
-                            <span className="log-date">{log.date}</span>
-                            <span className="log-action">{log.action}</span>
+              {/* Navigation Tabs */}
+              <div className="view-tabs card">
+                <div className="tabs">
+                  <button
+                    className={`tab ${activeView === 'inventory' ? 'active' : ''}`}
+                    onClick={() => setActiveView('inventory')}
+                  >
+                    Inventory
+                  </button>
+                  <button
+                    className={`tab ${activeView === 'operations' ? 'active' : ''}`}
+                    onClick={() => setActiveView('operations')}
+                  >
+                    Operations
+                  </button>
+                  <button
+                    className={`tab ${activeView === 'import-export' ? 'active' : ''}`}
+                    onClick={() => setActiveView('import-export')}
+                  >
+                    Import/Export
+                  </button>
+                  <button
+                    className={`tab ${activeView === 'analytics' ? 'active' : ''}`}
+                    onClick={() => setActiveView('analytics')}
+                  >
+                    Analytics
+                  </button>
+                </div>
+              </div>
+
+              {/* View Content */}
+              {activeView === 'inventory' && (
+                <>
+                  <section className="inventory-section">
+                    <h2>Inventory</h2>
+                    {inventoryLoading ? (
+                      <p>Loading inventory...</p>
+                    ) : inventoryItems.length === 0 ? (
+                      <p className="empty-message">
+                        No inventory items found for this location.
+                      </p>
+                    ) : (
+                      <div className="table-container">
+                        <table className="data-table">
+                          <thead>
+                            <tr>
+                              <th>Name</th>
+                              <th>Size</th>
+                              <th>Barcode</th>
+                              <th>Status</th>
+                              <th>Studio Location</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {inventoryItems.map((item) => (
+                              <tr key={item.key}>
+                                <td>{item.name}</td>
+                                <td>{item.size}</td>
+                                <td>
+                                  <code className="barcode">{item.barcode}</code>
+                                </td>
+                                <td>
+                                  <span className={`status-badge status-${item.status?.toLowerCase().replace(/\s+/g, '-')}`}>
+                                    {item.status}
+                                  </span>
+                                </td>
+                                <td>{item.studioLocation}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="logs-section">
+                    <h2>Activity Logs</h2>
+                    <p className="section-description">Last 100 entries, most recent first</p>
+                    {logsLoading ? (
+                      <p>Loading logs...</p>
+                    ) : logEntries.length === 0 ? (
+                      <p className="empty-message">No logs found for this location.</p>
+                    ) : (
+                      <div className="logs-list">
+                        {logEntries.map((log) => (
+                          <div key={log.key} className="log-entry">
+                            <div className="log-header">
+                              <span className="log-date">{log.date}</span>
+                              <span className="log-action">{log.action}</span>
+                            </div>
+                            <div className="log-details">{log.details}</div>
                           </div>
-                          <div className="log-details">{log.details}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                </>
+              )}
+
+              {activeView === 'operations' && (
+                <Operations
+                  cityKey={selectedCity}
+                  cityName={cities[selectedCity].name}
+                  studioKey={selectedStudio}
+                  studioName={selectedStudioInfo?.name || ''}
+                  inventory={inventory}
+                  gps={gps}
+                />
+              )}
+
+              {activeView === 'import-export' && (
+                <ImportExport
+                  cityKey={selectedCity}
+                  cityName={cities[selectedCity].name}
+                  studioKey={selectedStudio}
+                  studioName={selectedStudioInfo?.name || ''}
+                  inventory={inventory}
+                  assignments={assignments}
+                  laundryOrders={laundryOrders}
+                  logs={logs}
+                />
+              )}
+
+              {activeView === 'analytics' && (
+                <div className="analytics-placeholder card">
+                  <h2 className="text-accent">Analytics</h2>
+                  <p className="text-muted">Analytics features coming soon...</p>
+                  <ul className="text-muted">
+                    <li>Routinely issued GPs report (7d/30d/custom)</li>
+                    <li>Items needed by size (weekly demand)</li>
+                    <li>Average lifespan by category</li>
+                    <li>Smart weekly audit list generator</li>
+                  </ul>
+                </div>
               )}
             </>
           )}
