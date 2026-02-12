@@ -10,12 +10,18 @@ UniformManager2 is a Spring Boot + Android (Jetpack Compose) project for trackin
 - **Audit logging**: Record actions (issue, return, transfers) for traceability.
 - **Roles & users**: Admin/staff/auditor roles (seeded users in migrations; security wiring pending PR).
 - **Soft hamper limits with warnings**: Counts can exceed capacity; warnings prompt pickups.
+- **CSV Import/Export**: Bulk data operations for inventory and game presenters via Android app.
+  - Import/export inventory items (with city/studio filtering)
+  - Import/export game presenters
+  - Export issued items, master logs, and audit reports
+  - CSV remains the primary path for bulk data management
 
 ## Architecture (brief)
 - **Backend**: Spring Boot 3, Spring Data JPA, Flyway migrations (pending merge), services for inventory, assignments, hampers, and laundry. Entities: `UniformItem`, `Studio`, `GamePresenter`, etc. Repositories with barcode/studio queries.
 - **Persistence**: PostgreSQL (recommended). Flyway migrations initialize schema (tables for cities, studios, presenters, uniform_items, assignments, laundry_orders, audit_entries, users/roles, idempotency keys, timestamps).
 - **Security (in-progress)**: JWT + role-based guards (ADMIN/STAFF/AUDITOR). Users/roles seeded via migrations.
-- **Android app**: Jetpack Compose UI with barcode scanning; local persistence via SharedPreferences + Gson for offline-first behavior. Status vocabulary alignment with backend is in progress (map “In Hamper” to “In Laundry”).
+- **Android app**: Jetpack Compose UI with barcode scanning; Firebase Realtime Database for real-time sync; SharedPreferences for offline cache. Supports CSV import/export for bulk operations.
+- **Web Dashboard**: Read-only Firebase-based dashboard for viewing inventory and activity logs.
 
 ## Quick Start (backend)
 1. **Prereqs**: JDK 17+, PostgreSQL, Gradle/Maven wrapper available.
@@ -26,10 +32,17 @@ UniformManager2 is a Spring Boot + Android (Jetpack Compose) project for trackin
 6. **Hamper counts**: Soft limit; operations continue when capacity is exceeded, but warnings should be surfaced. Ensure pickups call decrement.
 
 ## Quick Start (Android app)
-1. Open the project in Android Studio (Giraffe+), let it sync Gradle.
-2. Run on device/emulator with camera for barcode scanning.
-3. Select city/studio, scan presenter barcode to set staff, then scan uniform items to issue/return.
-4. Laundry screen shows hamper utilization; “full” triggers warning but not a block.
+1. **Setup Firebase**: Follow instructions in `FIREBASE_SETUP.md` to configure Firebase Realtime Database.
+2. Open the project in Android Studio (Giraffe+), let it sync Gradle.
+3. Run on device/emulator with camera for barcode scanning.
+4. Select city/studio, scan presenter barcode to set staff, then scan uniform items to issue/return.
+5. Laundry screen shows hamper utilization; "full" triggers warning but not a block.
+6. **CSV Operations**: Use the Import/Export buttons on the main screen for bulk data management:
+   - **IMP INV** / **EXP INV**: Import/export uniform inventory
+   - **IMP GP**: Import game presenters
+   - **EXP ISSUED**: Export issued items
+   - **EXP LOGS**: Export master activity log
+   - **Audit Report**: Export audit findings
 
 ## API/Security (planned/ongoing)
 - JWT authentication with seeded users (admin/staff/auditor) from migrations.
