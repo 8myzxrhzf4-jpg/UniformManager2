@@ -4,12 +4,15 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.net.Uri
 import android.os.Bundle
+import android.util.Size
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.*
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
@@ -1204,9 +1207,18 @@ fun BarcodeScannerView(onBarcodeDetected: (String) -> Unit, onClose: () -> Unit)
                         .also { it.setSurfaceProvider(previewView.surfaceProvider) }
 
                     // Performance optimized image analysis
+                    val resolutionSelector = ResolutionSelector.Builder()
+                        .setResolutionStrategy(
+                            ResolutionStrategy(
+                                Size(640, 480),
+                                ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
+                            )
+                        )
+                        .build()
+                    
                     val imageAnalysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .setTargetResolution(android.util.Size(640, 480))
+                        .setResolutionSelector(resolutionSelector)
                         .build()
 
                     // Use background executor to avoid main thread blocking
