@@ -275,3 +275,11 @@ Terminal states:
 - Hamper count increments on return, decrements on pickup
 - Audits only consider Available items as "on hand"
 
+
+## Import behavior (note)
+
+- Imports are written to Realtime Database under \`inventory/{cityKey}/{itemId}\`.  
+  The web UI reads inventory by the currently-selected city key, so ensure you select the intended city before importing.
+- \`studioLocation\` is used for per-studio filtering and should match the studio value used in the UI (case-insensitive).
+- If you use display names for cities in the UI, ensure a mapping to the DB city key is available (prefer storing and using the DB key in state).
+
