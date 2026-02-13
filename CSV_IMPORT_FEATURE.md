@@ -1,7 +1,76 @@
 # CSV Import/Export Feature Documentation
 
 ## Overview
-This document describes the CSV import/export feature implemented in the UniformManager2 Android app.
+This document describes the CSV import/export feature implemented in both the UniformManager2 Android app and Web UI.
+
+## Web UI Implementation
+
+### Import/Export Tab
+The web dashboard includes an Import/Export tab that allows bulk data operations.
+
+#### Import Type Selector
+- **Dropdown**: Select between "Inventory" or "Game Presenters (GPs)"
+- **Dynamic Help Text**: Shows required columns and format based on selection
+- **Context-Sensitive Preview**: Preview table columns change based on import type
+
+#### Inventory Import (Web)
+**Required Columns** (case-insensitive):
+- `ITEM` - uniform item name
+- `SIZE` - item size
+- `BARCODE` - unique identifier
+
+**Optional Columns**:
+- `STATUS` - item status (default: "In Stock")
+- `City` - city name (optional, uses context)
+- `Studio` - studio location (default: current studio)
+
+**Import Process**:
+1. Select "Inventory" from import type dropdown
+2. Review help text showing required columns
+3. Click file selector and choose CSV file
+4. System validates headers (case-insensitive)
+5. Preview shows parsed data with defaults applied
+6. Import button processes valid rows
+7. Success message shows count of imported items
+8. If rows were skipped, download button appears for CSV log
+
+**Duplicate Handling**:
+- Checks for duplicate barcodes within the CSV file
+- Checks for existing barcodes in database
+- Skipped rows are logged with reason
+- Download CSV log button appears when rows are skipped
+- Log format: Row Number, Data, Reason
+
+#### Game Presenter Import (Web)
+**Required Columns** (case-insensitive):
+- `Dealer` - presenter name
+- `ID card` - unique identifier
+
+**Import Process**:
+1. Select "Game Presenters (GPs)" from import type dropdown
+2. Review help text showing required columns
+3. Click file selector and choose CSV file
+4. System validates headers (case-insensitive)
+5. Preview shows Dealer and ID card columns
+6. Import button processes valid rows
+7. Success message shows count of imported presenters
+8. If rows were skipped, download button appears for CSV log
+
+**Duplicate Handling**:
+- Checks for duplicate ID cards within the CSV file
+- Checks for existing ID cards in database
+- Skipped rows are logged with reason
+- Download CSV log button appears when rows are skipped
+- Log format: Row Number, Data, Reason
+
+#### Export (Web)
+Export functionality remains unchanged:
+- Export inventory items with all fields
+- Export assignments with date filtering
+- Export laundry orders with date filtering
+- Export activity logs with date filtering
+
+## Android App Implementation
 
 ## Important Notes
 

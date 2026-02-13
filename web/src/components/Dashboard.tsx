@@ -299,6 +299,7 @@ export function Dashboard({ user }: DashboardProps) {
                   assignments={assignments}
                   laundryOrders={laundryOrders}
                   logs={logs}
+                  gamePresenters={gps}
                 />
               )}
 

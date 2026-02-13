@@ -143,6 +143,11 @@ export interface CSVImportRow {
   studioLocation: string;
 }
 
+export interface CSVGPImportRow {
+  gpName: string;
+  gpIdCard: string;
+}
+
 export interface CSVImportError {
   row: number;
   field: string;
@@ -155,4 +160,10 @@ export interface CSVImportResult {
   successRows: number;
   errorRows: number;
   errors: CSVImportError[];
+}
+
+export interface CSVSkippedRow {
+  rowNumber: number;
+  data: string;
+  reason: string;
 }
