@@ -4,6 +4,20 @@ import { db } from '../firebaseClient';
 import type { UniformItem, GamePresenter, Studio } from '../types';
 import './Operations.css';
 
+// TODO: Replace with actual authenticated user when auth is implemented
+const CURRENT_USER = 'web-user';
+
+// Helper to create tracking field resets
+const clearTrackingFields = (prefix: string) => ({
+  [`${prefix}/issuedAt`]: null,
+  [`${prefix}/issuedAtStudio`]: null,
+  [`${prefix}/issuedAtCity`]: null,
+  [`${prefix}/issuedBy`]: null,
+  [`${prefix}/returnedAt`]: null,
+  [`${prefix}/returnedAtStudio`]: null,
+  [`${prefix}/returnedBy`]: null,
+});
+
 interface OperationsProps {
   cityKey: string;
   cityName: string;
@@ -153,7 +167,9 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
     const barcodes = selectedItems.map(key => inventory[key].barcode);
     const uniqueBarcodes = new Set(barcodes);
     if (barcodes.length !== uniqueBarcodes.size) {
-      setMessage({ type: 'error', text: 'Duplicate barcodes detected in selected items' });
+      // Find duplicates
+      const duplicates = barcodes.filter((barcode, index) => barcodes.indexOf(barcode) !== index);
+      setMessage({ type: 'error', text: `Duplicate barcodes detected: ${[...new Set(duplicates)].join(', ')}` });
       return;
     }
 
@@ -184,7 +200,7 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
         updates[`inventory/${cityKey}/${itemKey}/issuedAt`] = timestamp;
         updates[`inventory/${cityKey}/${itemKey}/issuedAtStudio`] = targetStudioKey;
         updates[`inventory/${cityKey}/${itemKey}/issuedAtCity`] = cityKey;
-        updates[`inventory/${cityKey}/${itemKey}/issuedBy`] = 'web-user'; // TODO: Use actual user
+        updates[`inventory/${cityKey}/${itemKey}/issuedBy`] = CURRENT_USER; // TODO: Use actual user
 
         // Create assignment record
         const assignmentKey = push(ref(db, `assignments/${cityKey}`)).key;
@@ -197,7 +213,7 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
           issuedAt: timestamp,
           issuedAtStudio: targetStudioKey,
           issuedAtCity: cityKey,
-          issuedBy: 'web-user', // TODO: Use actual user
+          issuedBy: CURRENT_USER, // TODO: Use actual user
           status: 'active',
           city: cityName,
           studio: targetStudioName,
@@ -403,7 +419,7 @@ function ReturnOperation({ cityKey, studioKey, studioName, inventory, studios = 
       updates[`inventory/${cityKey}/${itemKey}/status`] = 'In Hamper';
       updates[`inventory/${cityKey}/${itemKey}/returnedAt`] = timestamp;
       updates[`inventory/${cityKey}/${itemKey}/returnedAtStudio`] = targetStudioKey;
-      updates[`inventory/${cityKey}/${itemKey}/returnedBy`] = 'web-user'; // TODO: Use actual user
+      updates[`inventory/${cityKey}/${itemKey}/returnedBy`] = CURRENT_USER; // TODO: Use actual user
       updates[`inventory/${cityKey}/${itemKey}/studioLocation`] = targetStudioKey; // Update location to return studio
 
       // Increment hamper count for the target studio
@@ -420,7 +436,7 @@ function ReturnOperation({ cityKey, studioKey, studioName, inventory, studios = 
         if (assignment.itemBarcode === item.barcode && assignment.status === 'active') {
           updates[`assignments/${cityKey}/${assignmentKey}/returnedAt`] = timestamp;
           updates[`assignments/${cityKey}/${assignmentKey}/returnedAtStudio`] = targetStudioKey;
-          updates[`assignments/${cityKey}/${assignmentKey}/returnedBy`] = 'web-user'; // TODO: Use actual user
+          updates[`assignments/${cityKey}/${assignmentKey}/returnedBy`] = CURRENT_USER; // TODO: Use actual user
           updates[`assignments/${cityKey}/${assignmentKey}/status`] = 'returned';
         }
       }
@@ -604,13 +620,7 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
         updates[`inventory/${cityKey}/${itemKey}/status`] = 'Available';
         updates[`inventory/${cityKey}/${itemKey}/studioLocation`] = studioKey;
         // Clear issue/return tracking since item is now clean and available
-        updates[`inventory/${cityKey}/${itemKey}/issuedAt`] = null;
-        updates[`inventory/${cityKey}/${itemKey}/issuedAtStudio`] = null;
-        updates[`inventory/${cityKey}/${itemKey}/issuedAtCity`] = null;
-        updates[`inventory/${cityKey}/${itemKey}/issuedBy`] = null;
-        updates[`inventory/${cityKey}/${itemKey}/returnedAt`] = null;
-        updates[`inventory/${cityKey}/${itemKey}/returnedAtStudio`] = null;
-        updates[`inventory/${cityKey}/${itemKey}/returnedBy`] = null;
+        Object.assign(updates, clearTrackingFields(`inventory/${cityKey}/${itemKey}`));
       }
 
       // Update laundry order status if found

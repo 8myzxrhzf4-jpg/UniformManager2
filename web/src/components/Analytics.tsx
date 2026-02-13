@@ -887,7 +887,7 @@ function SmartAuditScanner({ cityKey, cityName, studioKey, studioName, inventory
     return Array.from(szs).sort();
   }, [inventory]);
 
-  // Calculate expected items: Available only, exclude In Hamper and At Laundry
+  // Calculate expected items: Only Available items (excludes In Hamper and At Laundry by checking for Available status)
   const expectedItems = useMemo(() => {
     if (!category || !size) return [];
     
@@ -896,7 +896,7 @@ function SmartAuditScanner({ cityKey, cityName, studioKey, studioName, inventory
         item.category === category &&
         item.size === size &&
         item.studioLocation === studioKey &&
-        item.status === 'Available' // Only Available items, exclude In Hamper and At Laundry
+        item.status === 'Available' // Only Available items
       )
       .map(([, item]) => item.barcode);
   }, [inventory, category, size, studioKey]);
