@@ -162,11 +162,29 @@ function ImportCSV({ cityKey, studioKey, studioName, inventory, gamePresenters, 
         continue;
       }
 
+      // Validate status value if provided
+      const allowedStatuses = ['Available', 'In Stock', 'Issued', 'In Hamper', 'At Laundry', 'Damaged', 'Lost'];
+      const statusValue = row.status ? row.status.trim() : '';
+      if (statusValue && !allowedStatuses.some(s => s.toLowerCase() === statusValue.toLowerCase())) {
+        skipped.push({
+          rowNumber: lineNumber,
+          data: rowData,
+          reason: `Invalid status "${statusValue}". Must be one of: ${allowedStatuses.join(', ')}`
+        });
+        continue;
+      }
+
+      // Normalize status: default to "Available" if empty, map "In Stock" to "Available"
+      let normalizedStatus = statusValue || 'Available';
+      if (normalizedStatus.toLowerCase() === 'in stock') {
+        normalizedStatus = 'Available';
+      }
+
       rows.push({
         name: row.item,
         size: row.size,
         barcode: row.barcode,
-        status: row.status || 'In Stock',
+        status: normalizedStatus,
         category: 'Other',
         studioLocation: row.studio || studioKey,
       });
@@ -412,7 +430,8 @@ function ImportCSV({ cityKey, studioKey, studioName, inventory, gamePresenters, 
               <li><strong>ITEM</strong> - uniform item name</li>
               <li><strong>SIZE</strong> - item size</li>
               <li><strong>BARCODE</strong> - unique identifier</li>
-              <li><strong>STATUS</strong> - item status (optional, default: "In Stock")</li>
+              <li><strong>STATUS</strong> - item status (optional, default: "Available")</li>
+              <li style={{ marginLeft: '1.5rem', fontSize: '0.85rem' }}>Valid: Available, In Stock, Issued, In Hamper, At Laundry, Damaged, Lost</li>
               <li><strong>City</strong> - city name (optional)</li>
               <li><strong>Studio</strong> - studio location (optional, default: {studioName})</li>
             </ul>

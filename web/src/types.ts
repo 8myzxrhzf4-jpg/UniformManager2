@@ -1,5 +1,18 @@
 // Data models aligned with Firebase Realtime Database schema
 
+// Valid uniform status values
+export type UniformStatus = 
+  | 'Available'      // Available for issue (same as "In Stock")
+  | 'In Stock'       // Available for issue (legacy, treated as "Available")
+  | 'Issued'         // Issued to a game presenter
+  | 'In Hamper'      // Returned to hamper at studio, awaiting laundry pickup
+  | 'At Laundry'     // Picked up by laundry service
+  | 'Damaged'        // Damaged and out of service
+  | 'Lost';          // Lost and out of service
+
+// Valid role types
+export type UserRole = 'Super User' | 'Admin' | 'Staff' | 'Auditor';
+
 export interface Studio {
   name: string;
   hamperCapacity: number;
@@ -15,9 +28,18 @@ export interface UniformItem {
   name: string;
   size: string;
   barcode: string;
-  status: string;
+  status: UniformStatus | string; // Allow string for backward compatibility
   category: string;
   studioLocation: string;
+  // Issue tracking
+  issuedAtStudio?: string;
+  issuedAtCity?: string;
+  issuedBy?: string;
+  issuedAt?: string;
+  // Return tracking
+  returnedAtStudio?: string;
+  returnedBy?: string;
+  returnedAt?: string;
 }
 
 export interface LogEntry {
@@ -29,9 +51,18 @@ export interface LogEntry {
 // Game Presenter (GP) interface
 export interface GamePresenter {
   name: string;
-  barcode?: string;
+  barcode?: string;  // GP ID card
   city?: string;
   studio?: string;
+}
+
+// User authentication and roles
+export interface User {
+  uid: string;
+  email: string;
+  role: UserRole;
+  city?: string;      // For non-Super users, their assigned city
+  studios?: string[]; // For non-Super users, their assigned studios
 }
 
 // Assignment tracking
@@ -41,8 +72,15 @@ export interface Assignment {
   itemSize: string;
   gpName: string;
   gpBarcode?: string;
+  // Issue tracking
   issuedAt: string;
+  issuedAtStudio: string;
+  issuedAtCity: string;
+  issuedBy?: string;
+  // Return tracking
   returnedAt?: string;
+  returnedAtStudio?: string;
+  returnedBy?: string;
   status: 'active' | 'returned';
   city: string;
   studio: string;
@@ -84,6 +122,37 @@ export interface AuditHistoryEntry {
   delta: number; // actualCount - expectedCount
   auditedAt: string;
   auditedBy?: string;
+}
+
+// Smart Audit: Audit session for scanning and comparing
+export interface AuditSession {
+  id: string;
+  category: string;
+  size: string;
+  studio: string;
+  studioKey: string;
+  city: string;
+  cityKey: string;
+  startedAt: string;
+  startedBy: string;
+  completedAt?: string;
+  expectedBarcodes: string[]; // Expected items (Available only, excluding laundry states)
+  scannedBarcodes: string[];  // Actually found items
+  missingBarcodes: string[];  // Expected but not found
+  unexpectedBarcodes: string[]; // Found but not expected
+}
+
+// Smart Audit: Audit result for CSV export
+export interface AuditResult {
+  category: string;
+  size: string;
+  studio: string;
+  expectedCount: number;
+  foundCount: number;
+  missingCount: number;
+  missingBarcodes: string[];
+  auditedAt: string;
+  auditedBy: string;
 }
 
 // Analytics: Weekly audit list

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ref, update, push, get } from 'firebase/database';
 import { db } from '../firebaseClient';
-import type { UniformItem, GamePresenter } from '../types';
+import type { UniformItem, GamePresenter, Studio } from '../types';
 import './Operations.css';
 
 interface OperationsProps {
@@ -11,10 +11,11 @@ interface OperationsProps {
   studioName: string;
   inventory: Record<string, UniformItem>;
   gps: Record<string, GamePresenter>;
+  studios?: Record<string, Studio>;
   onRefresh?: () => void;
 }
 
-export function Operations({ cityKey, cityName, studioKey, studioName, inventory, gps, onRefresh }: OperationsProps) {
+export function Operations({ cityKey, cityName, studioKey, studioName, inventory, gps, studios = {}, onRefresh }: OperationsProps) {
   const [activeTab, setActiveTab] = useState<'issue' | 'return' | 'laundry' | 'damage'>('issue');
 
   return (
@@ -57,6 +58,7 @@ export function Operations({ cityKey, cityName, studioKey, studioName, inventory
             studioName={studioName}
             inventory={inventory}
             gps={gps}
+            studios={studios}
             onRefresh={onRefresh}
           />
         )}
@@ -67,6 +69,7 @@ export function Operations({ cityKey, cityName, studioKey, studioName, inventory
             studioKey={studioKey}
             studioName={studioName}
             inventory={inventory}
+            studios={studios}
             onRefresh={onRefresh}
           />
         )}
@@ -102,19 +105,25 @@ interface OperationComponentProps {
   studioName: string;
   inventory: Record<string, UniformItem>;
   gps?: Record<string, GamePresenter>;
+  studios?: Record<string, Studio>;
   onRefresh?: () => void;
 }
 
-function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, gps, onRefresh }: OperationComponentProps) {
+function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, gps, studios = {}, onRefresh }: OperationComponentProps) {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [selectedGP, setSelectedGP] = useState('');
   const [newGPName, setNewGPName] = useState('');
+  const [newGPIdCard, setNewGPIdCard] = useState('');
+  const [targetStudioKey, setTargetStudioKey] = useState(studioKey);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Filter items that are In Stock and in the selected studio
+  // Get studio list
+  const studioList = Object.entries(studios).map(([key, studio]) => ({ key, name: studio.name }));
+
+  // Filter items that are Available/In Stock and in the selected studio
   const availableItems = Object.entries(inventory).filter(
-    ([_, item]) => item.status === 'In Stock' && item.studioLocation === studioKey
+    ([_, item]) => (item.status === 'Available' || item.status === 'In Stock') && item.studioLocation === targetStudioKey
   );
 
   const gpList = gps ? Object.entries(gps).map(([key, gp]) => ({ key, ...gp })) : [];
@@ -127,9 +136,35 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
 
     const gpName = selectedGP === 'new' ? newGPName.trim() : 
                    gpList.find(gp => gp.key === selectedGP)?.name || '';
+    const gpIdCard = selectedGP === 'new' ? newGPIdCard.trim() : 
+                     gpList.find(gp => gp.key === selectedGP)?.barcode || '';
 
     if (!gpName) {
       setMessage({ type: 'error', text: 'Please select or enter a GP name' });
+      return;
+    }
+
+    if (selectedGP === 'new' && !newGPIdCard.trim()) {
+      setMessage({ type: 'error', text: 'Please enter GP ID card' });
+      return;
+    }
+
+    // Check for duplicate barcodes in the batch
+    const barcodes = selectedItems.map(key => inventory[key].barcode);
+    const uniqueBarcodes = new Set(barcodes);
+    if (barcodes.length !== uniqueBarcodes.size) {
+      setMessage({ type: 'error', text: 'Duplicate barcodes detected in selected items' });
+      return;
+    }
+
+    // Check that all items are Available or In Stock
+    const nonAvailableItems = selectedItems.filter(key => {
+      const item = inventory[key];
+      return item.status !== 'Available' && item.status !== 'In Stock';
+    });
+    if (nonAvailableItems.length > 0) {
+      const itemNames = nonAvailableItems.map(key => inventory[key].name).join(', ');
+      setMessage({ type: 'error', text: `Cannot issue non-Available items: ${itemNames}` });
       return;
     }
 
@@ -139,11 +174,17 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
     try {
       const updates: Record<string, any> = {};
       const timestamp = new Date().toISOString();
+      const targetStudio = studioList.find(s => s.key === targetStudioKey);
+      const targetStudioName = targetStudio?.name || studioName;
 
       // Update each selected item's status to Issued
       for (const itemKey of selectedItems) {
         const item = inventory[itemKey];
         updates[`inventory/${cityKey}/${itemKey}/status`] = 'Issued';
+        updates[`inventory/${cityKey}/${itemKey}/issuedAt`] = timestamp;
+        updates[`inventory/${cityKey}/${itemKey}/issuedAtStudio`] = targetStudioKey;
+        updates[`inventory/${cityKey}/${itemKey}/issuedAtCity`] = cityKey;
+        updates[`inventory/${cityKey}/${itemKey}/issuedBy`] = 'web-user'; // TODO: Use actual user
 
         // Create assignment record
         const assignmentKey = push(ref(db, `assignments/${cityKey}`)).key;
@@ -152,29 +193,34 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
           itemName: item.name,
           itemSize: item.size,
           gpName,
+          gpBarcode: gpIdCard,
           issuedAt: timestamp,
+          issuedAtStudio: targetStudioKey,
+          issuedAtCity: cityKey,
+          issuedBy: 'web-user', // TODO: Use actual user
           status: 'active',
           city: cityName,
-          studio: studioName,
+          studio: targetStudioName,
         };
       }
 
       // Add GP if new
       if (selectedGP === 'new' && newGPName.trim()) {
-        const gpKey = push(ref(db, 'gps')).key;
-        updates[`gps/${gpKey}`] = {
+        const gpKey = push(ref(db, `gamePresenters/${cityKey}`)).key;
+        updates[`gamePresenters/${cityKey}/${gpKey}`] = {
           name: newGPName.trim(),
+          barcode: newGPIdCard.trim(),
           city: cityName,
-          studio: studioName,
+          studio: targetStudioName,
         };
       }
 
       // Log the action
-      const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
-      updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
+      const logKey = push(ref(db, `logs/${cityKey}/${targetStudioKey}`)).key;
+      updates[`logs/${cityKey}/${targetStudioKey}/${logKey}`] = {
         date: timestamp,
         action: 'ISSUE',
-        details: `Issued ${selectedItems.length} item(s) to ${gpName}: ${selectedItems.map(k => inventory[k].name).join(', ')}`,
+        details: `Issued ${selectedItems.length} item(s) to ${gpName} at ${targetStudioName}: ${selectedItems.map(k => inventory[k].name).join(', ')}`,
       };
 
       await update(ref(db), updates);
@@ -183,6 +229,7 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
       setSelectedItems([]);
       setSelectedGP('');
       setNewGPName('');
+      setNewGPIdCard('');
       
       if (onRefresh) {
         setTimeout(onRefresh, 500);
@@ -207,6 +254,25 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
       )}
 
       <div className="form-group">
+        <label>Target Studio</label>
+        <select
+          value={targetStudioKey}
+          onChange={(e) => {
+            setTargetStudioKey(e.target.value);
+            setSelectedItems([]); // Clear selections when studio changes
+          }}
+          className="input-dark"
+          disabled={loading}
+        >
+          {studioList.map((studio) => (
+            <option key={studio.key} value={studio.key}>
+              {studio.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="form-group">
         <label>Select Game Presenter</label>
         <select
           value={selectedGP}
@@ -217,7 +283,7 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
           <option value="">-- Select GP --</option>
           {gpList.map((gp) => (
             <option key={gp.key} value={gp.key}>
-              {gp.name}
+              {gp.name} {gp.barcode ? `(${gp.barcode})` : ''}
             </option>
           ))}
           <option value="new">+ Add New GP</option>
@@ -225,21 +291,34 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
       </div>
 
       {selectedGP === 'new' && (
-        <div className="form-group">
-          <label>New GP Name</label>
-          <input
-            type="text"
-            value={newGPName}
-            onChange={(e) => setNewGPName(e.target.value)}
-            placeholder="Enter GP name"
-            className="input-dark"
-            disabled={loading}
-          />
-        </div>
+        <>
+          <div className="form-group">
+            <label>New GP Name</label>
+            <input
+              type="text"
+              value={newGPName}
+              onChange={(e) => setNewGPName(e.target.value)}
+              placeholder="Enter GP name"
+              className="input-dark"
+              disabled={loading}
+            />
+          </div>
+          <div className="form-group">
+            <label>New GP ID Card</label>
+            <input
+              type="text"
+              value={newGPIdCard}
+              onChange={(e) => setNewGPIdCard(e.target.value)}
+              placeholder="Enter GP ID card number"
+              className="input-dark"
+              disabled={loading}
+            />
+          </div>
+        </>
       )}
 
       <div className="form-group">
-        <label>Select Items (In Stock at {studioName})</label>
+        <label>Select Items (Available at {studioList.find(s => s.key === targetStudioKey)?.name || 'selected studio'})</label>
         {availableItems.length === 0 ? (
           <p className="text-muted">No items available to issue at this studio</p>
         ) : (
@@ -269,7 +348,7 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
 
       <button
         onClick={handleIssue}
-        disabled={loading || selectedItems.length === 0 || (!selectedGP && !newGPName)}
+        disabled={loading || selectedItems.length === 0 || (!selectedGP)}
         className="btn btn-gold"
       >
         {loading ? 'Issuing...' : `Issue ${selectedItems.length} Item(s)`}
@@ -278,10 +357,14 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
   );
 }
 
-function ReturnOperation({ cityKey, studioKey, inventory, onRefresh }: OperationComponentProps) {
+function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, studios = {}, onRefresh }: OperationComponentProps) {
   const [barcode, setBarcode] = useState('');
+  const [targetStudioKey, setTargetStudioKey] = useState(studioKey);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
+
+  // Get studio list
+  const studioList = Object.entries(studios).map(([key, studio]) => ({ key, name: studio.name }));
 
   const handleReturn = async () => {
     if (!barcode.trim()) {
@@ -304,16 +387,30 @@ function ReturnOperation({ cityKey, studioKey, inventory, onRefresh }: Operation
 
       const [itemKey, item] = itemEntry;
 
-      // Warn if not Issued or In Laundry
-      if (item.status !== 'Issued' && item.status !== 'In Laundry') {
-        setMessage({ type: 'warning', text: `Warning: Item status is "${item.status}", not "Issued" or "In Laundry"` });
+      // Only allow returning Issued items
+      if (item.status !== 'Issued') {
+        setMessage({ type: 'error', text: `Item status is "${item.status}". Only Issued items can be returned.` });
+        setLoading(false);
+        return;
       }
 
       const updates: Record<string, any> = {};
       const timestamp = new Date().toISOString();
+      const targetStudio = studioList.find(s => s.key === targetStudioKey);
+      const targetStudioName = targetStudio?.name || studioName;
 
-      // Update item status to In Stock
-      updates[`inventory/${cityKey}/${itemKey}/status`] = 'In Stock';
+      // Update item status to In Hamper and track return info
+      updates[`inventory/${cityKey}/${itemKey}/status`] = 'In Hamper';
+      updates[`inventory/${cityKey}/${itemKey}/returnedAt`] = timestamp;
+      updates[`inventory/${cityKey}/${itemKey}/returnedAtStudio`] = targetStudioKey;
+      updates[`inventory/${cityKey}/${itemKey}/returnedBy`] = 'web-user'; // TODO: Use actual user
+      updates[`inventory/${cityKey}/${itemKey}/studioLocation`] = targetStudioKey; // Update location to return studio
+
+      // Increment hamper count for the target studio
+      if (studios[targetStudioKey]) {
+        const currentCount = studios[targetStudioKey].currentHamperCount || 0;
+        updates[`cities/${cityKey}/studios/${targetStudioKey}/currentHamperCount`] = currentCount + 1;
+      }
 
       // Find and close active assignment
       const assignmentsSnapshot = await get(ref(db, `assignments/${cityKey}`));
@@ -322,21 +419,23 @@ function ReturnOperation({ cityKey, studioKey, inventory, onRefresh }: Operation
       for (const [assignmentKey, assignment] of Object.entries(assignments) as [string, any][]) {
         if (assignment.itemBarcode === item.barcode && assignment.status === 'active') {
           updates[`assignments/${cityKey}/${assignmentKey}/returnedAt`] = timestamp;
+          updates[`assignments/${cityKey}/${assignmentKey}/returnedAtStudio`] = targetStudioKey;
+          updates[`assignments/${cityKey}/${assignmentKey}/returnedBy`] = 'web-user'; // TODO: Use actual user
           updates[`assignments/${cityKey}/${assignmentKey}/status`] = 'returned';
         }
       }
 
       // Log the action
-      const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
-      updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
+      const logKey = push(ref(db, `logs/${cityKey}/${targetStudioKey}`)).key;
+      updates[`logs/${cityKey}/${targetStudioKey}/${logKey}`] = {
         date: timestamp,
         action: 'RETURN',
-        details: `Returned ${item.name} (${item.barcode}) - previous status: ${item.status}`,
+        details: `Returned ${item.name} (${item.barcode}) to ${targetStudioName} hamper - issued from: ${item.issuedAtStudio || 'unknown'}`,
       };
 
       await update(ref(db), updates);
 
-      setMessage({ type: 'success', text: `Successfully returned ${item.name} (${item.barcode})` });
+      setMessage({ type: 'success', text: `Successfully returned ${item.name} (${item.barcode}) to ${targetStudioName} hamper` });
       setBarcode('');
       
       if (onRefresh) {
@@ -353,13 +452,30 @@ function ReturnOperation({ cityKey, studioKey, inventory, onRefresh }: Operation
   return (
     <div className="operation-content">
       <h3>Return Uniforms</h3>
-      <p className="text-muted">Scan or enter barcode to return item</p>
+      <p className="text-muted">Scan or enter barcode to return item to hamper</p>
 
       {message && (
         <div className={`alert alert-${message.type}`}>
           {message.text}
         </div>
       )}
+
+      <div className="form-group">
+        <label>Return to Studio</label>
+        <select
+          value={targetStudioKey}
+          onChange={(e) => setTargetStudioKey(e.target.value)}
+          className="input-dark"
+          disabled={loading}
+        >
+          {studioList.map((studio) => (
+            <option key={studio.key} value={studio.key}>
+              {studio.name}
+            </option>
+          ))}
+        </select>
+        <small className="text-muted">Item will be placed in this studio's hamper</small>
+      </div>
 
       <div className="form-group">
         <label>Barcode</label>
@@ -384,7 +500,7 @@ function ReturnOperation({ cityKey, studioKey, inventory, onRefresh }: Operation
         disabled={loading || !barcode.trim()}
         className="btn btn-gold"
       >
-        {loading ? 'Processing...' : 'Return Item'}
+        {loading ? 'Processing...' : 'Return Item to Hamper'}
       </button>
     </div>
   );
@@ -392,17 +508,24 @@ function ReturnOperation({ cityKey, studioKey, inventory, onRefresh }: Operation
 
 function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory, onRefresh }: OperationComponentProps) {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [operation, setOperation] = useState<'pickup' | 'receive'>('pickup');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Filter items that are Issued (going to laundry) and in the selected studio
-  const availableItems = Object.entries(inventory).filter(
-    ([_, item]) => item.status === 'Issued' && item.studioLocation === studioKey
-  );
+  // Filter items based on operation
+  // For pickup: items In Hamper at selected studio
+  // For receive: items At Laundry
+  const availableItems = Object.entries(inventory).filter(([_, item]) => {
+    if (operation === 'pickup') {
+      return item.status === 'In Hamper' && item.studioLocation === studioKey;
+    } else {
+      return item.status === 'At Laundry';
+    }
+  });
 
-  const handleCreateLaundryOrder = async () => {
+  const handleLaundryPickup = async () => {
     if (selectedItems.length === 0) {
-      setMessage({ type: 'error', text: 'Please select at least one item for laundry' });
+      setMessage({ type: 'error', text: 'Please select at least one item for laundry pickup' });
       return;
     }
 
@@ -420,42 +543,113 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
         orderNumber,
         items: selectedItems.map(k => inventory[k].barcode),
         createdAt: timestamp,
-        status: 'pending',
+        pickedUpAt: timestamp,
+        status: 'picked_up',
         city: cityName,
         studio: studioName,
         itemCount: selectedItems.length,
       };
 
-      // Update each selected item's status to In Laundry
+      // Update each selected item's status to At Laundry
       for (const itemKey of selectedItems) {
-        updates[`inventory/${cityKey}/${itemKey}/status`] = 'In Laundry';
+        updates[`inventory/${cityKey}/${itemKey}/status`] = 'At Laundry';
       }
 
-      // Increment hamper count
+      // Decrement hamper count for picked up items
       const hamperCountRef = ref(db, `cities/${cityKey}/studios/${studioKey}/currentHamperCount`);
       const hamperSnapshot = await get(hamperCountRef);
       const currentCount = hamperSnapshot.val() || 0;
-      updates[`cities/${cityKey}/studios/${studioKey}/currentHamperCount`] = currentCount + selectedItems.length;
+      const newCount = Math.max(0, currentCount - selectedItems.length);
+      updates[`cities/${cityKey}/studios/${studioKey}/currentHamperCount`] = newCount;
 
       // Log the action
       const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
       updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
         date: timestamp,
-        action: 'LAUNDRY',
-        details: `Created laundry order ${orderNumber} with ${selectedItems.length} item(s): ${selectedItems.map(k => inventory[k].name).join(', ')}`,
+        action: 'LAUNDRY_PICKUP',
+        details: `Laundry pickup ${orderNumber}: ${selectedItems.length} item(s) sent to laundry from ${studioName}`,
       };
 
       await update(ref(db), updates);
 
-      setMessage({ type: 'success', text: `Laundry order ${orderNumber} created with ${selectedItems.length} item(s)` });
+      setMessage({ type: 'success', text: `Laundry pickup ${orderNumber} completed: ${selectedItems.length} item(s) sent to laundry` });
       setSelectedItems([]);
       
       if (onRefresh) {
         setTimeout(onRefresh, 500);
       }
     } catch (error) {
-      console.error('Laundry order error:', error);
-      setMessage({ type: 'error', text: 'Failed to create laundry order. Please try again.' });
+      console.error('Laundry pickup error:', error);
+      setMessage({ type: 'error', text: 'Failed to process laundry pickup. Please try again.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLaundryReceive = async () => {
+    if (selectedItems.length === 0) {
+      setMessage({ type: 'error', text: 'Please select at least one item to receive from laundry' });
+      return;
+    }
+
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      const updates: Record<string, any> = {};
+      const timestamp = new Date().toISOString();
+
+      // Update each selected item's status to Available
+      for (const itemKey of selectedItems) {
+        const item = inventory[itemKey];
+        updates[`inventory/${cityKey}/${itemKey}/status`] = 'Available';
+        updates[`inventory/${cityKey}/${itemKey}/studioLocation`] = studioKey;
+        // Clear issue/return tracking since item is now clean and available
+        updates[`inventory/${cityKey}/${itemKey}/issuedAt`] = null;
+        updates[`inventory/${cityKey}/${itemKey}/issuedAtStudio`] = null;
+        updates[`inventory/${cityKey}/${itemKey}/issuedAtCity`] = null;
+        updates[`inventory/${cityKey}/${itemKey}/issuedBy`] = null;
+        updates[`inventory/${cityKey}/${itemKey}/returnedAt`] = null;
+        updates[`inventory/${cityKey}/${itemKey}/returnedAtStudio`] = null;
+        updates[`inventory/${cityKey}/${itemKey}/returnedBy`] = null;
+      }
+
+      // Update laundry order status if found
+      const ordersSnapshot = await get(ref(db, `laundry_orders/${cityKey}`));
+      const orders = ordersSnapshot.val() || {};
+      
+      for (const [orderKey, order] of Object.entries(orders) as [string, any][]) {
+        if (order.status === 'picked_up') {
+          const orderItemBarcodes = order.items || [];
+          const selectedBarcodes = selectedItems.map(k => inventory[k].barcode);
+          const hasMatchingItems = selectedBarcodes.some((bc: string) => orderItemBarcodes.includes(bc));
+          
+          if (hasMatchingItems) {
+            updates[`laundry_orders/${cityKey}/${orderKey}/returnedAt`] = timestamp;
+            updates[`laundry_orders/${cityKey}/${orderKey}/status`] = 'returned';
+          }
+        }
+      }
+
+      // Log the action
+      const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
+      updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
+        date: timestamp,
+        action: 'LAUNDRY_RECEIVE',
+        details: `Received ${selectedItems.length} item(s) from laundry at ${studioName}, now Available`,
+      };
+
+      await update(ref(db), updates);
+
+      setMessage({ type: 'success', text: `Successfully received ${selectedItems.length} item(s) from laundry. Items are now Available.` });
+      setSelectedItems([]);
+      
+      if (onRefresh) {
+        setTimeout(onRefresh, 500);
+      }
+    } catch (error) {
+      console.error('Laundry receive error:', error);
+      setMessage({ type: 'error', text: 'Failed to receive items from laundry. Please try again.' });
     } finally {
       setLoading(false);
     }
@@ -463,8 +657,8 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
 
   return (
     <div className="operation-content">
-      <h3>Create Laundry Order</h3>
-      <p className="text-muted">Select issued items to send to laundry</p>
+      <h3>Laundry Operations</h3>
+      <p className="text-muted">Manage laundry pickup and return</p>
 
       {message && (
         <div className={`alert alert-${message.type}`}>
@@ -473,9 +667,33 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
       )}
 
       <div className="form-group">
-        <label>Select Items (Issued at {studioName})</label>
+        <label>Operation</label>
+        <select
+          value={operation}
+          onChange={(e) => {
+            setOperation(e.target.value as 'pickup' | 'receive');
+            setSelectedItems([]);
+          }}
+          className="input-dark"
+          disabled={loading}
+        >
+          <option value="pickup">Pickup from Hamper (In Hamper → At Laundry)</option>
+          <option value="receive">Receive from Laundry (At Laundry → Available)</option>
+        </select>
+      </div>
+
+      <div className="form-group">
+        <label>
+          {operation === 'pickup' 
+            ? `Select Items (In Hamper at ${studioName})` 
+            : 'Select Items (At Laundry)'}
+        </label>
         {availableItems.length === 0 ? (
-          <p className="text-muted">No issued items available for laundry at this studio</p>
+          <p className="text-muted">
+            {operation === 'pickup'
+              ? 'No items in hamper at this studio'
+              : 'No items currently at laundry'}
+          </p>
         ) : (
           <div className="item-list">
             {availableItems.map(([key, item]) => (
@@ -493,7 +711,7 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
                   disabled={loading}
                 />
                 <span>
-                  {item.name} - {item.size} ({item.barcode})
+                  {item.name} - {item.size} ({item.barcode}) - Studio: {item.studioLocation}
                 </span>
               </label>
             ))}
@@ -502,11 +720,15 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
       </div>
 
       <button
-        onClick={handleCreateLaundryOrder}
+        onClick={operation === 'pickup' ? handleLaundryPickup : handleLaundryReceive}
         disabled={loading || selectedItems.length === 0}
         className="btn btn-gold"
       >
-        {loading ? 'Creating...' : `Create Laundry Order (${selectedItems.length} items)`}
+        {loading 
+          ? 'Processing...' 
+          : operation === 'pickup'
+          ? `Send ${selectedItems.length} Item(s) to Laundry`
+          : `Receive ${selectedItems.length} Item(s) from Laundry`}
       </button>
     </div>
   );
