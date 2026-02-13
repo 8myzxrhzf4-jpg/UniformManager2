@@ -97,6 +97,7 @@ export function Analytics({ cityKey, cityName, studioKey, studioName, inventory,
             studioKey={studioKey}
             studioName={studioName}
             inventory={inventory}
+            assignments={assignments}
           />
         )}
       </div>
@@ -853,7 +854,7 @@ function AuditListGenerator({ cityKey, cityName, studioKey, studioName, inventor
 }
 
 // Smart Audit Scanner Component
-function SmartAuditScanner({ cityKey, cityName, studioKey, studioName, inventory }: AnalyticsComponentProps & { inventory: Record<string, UniformItem>; cityName: string }) {
+function SmartAuditScanner({ cityKey, cityName, studioKey, studioName, inventory }: AnalyticsComponentProps & { inventory: Record<string, UniformItem>; cityName: string; studioName: string }) {
   const [category, setCategory] = useState('');
   const [size, setSize] = useState('');
   const [scanning, setScanning] = useState(false);

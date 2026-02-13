@@ -357,7 +357,7 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
   );
 }
 
-function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, studios = {}, onRefresh }: OperationComponentProps) {
+function ReturnOperation({ cityKey, studioKey, studioName, inventory, studios = {}, onRefresh }: OperationComponentProps) {
   const [barcode, setBarcode] = useState('');
   const [targetStudioKey, setTargetStudioKey] = useState(studioKey);
   const [loading, setLoading] = useState(false);
@@ -601,7 +601,6 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
 
       // Update each selected item's status to Available
       for (const itemKey of selectedItems) {
-        const item = inventory[itemKey];
         updates[`inventory/${cityKey}/${itemKey}/status`] = 'Available';
         updates[`inventory/${cityKey}/${itemKey}/studioLocation`] = studioKey;
         // Clear issue/return tracking since item is now clean and available
