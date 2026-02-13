@@ -1,0 +1,11 @@
+ITEM,SIZE,BARCODE,STATUS,City,Studio
+Dealer Jacket,M,INV001,In Stock,Las Vegas,Main Floor
+Dealer Vest,L,INV002,In Stock,Las Vegas,Main Floor
+Dealer Shirt,S,INV003,In Stock,Las Vegas,Main Floor
+Dealer Trousers,M,INV004,In Stock,Las Vegas,High Limit
+Floor Manager Jacket,XL,INV005,In Stock,Las Vegas,Main Floor
+Floor Manager Vest,L,INV006,In Stock,Las Vegas,Main Floor
+Security Jacket,L,INV007,In Stock,Las Vegas,Security Desk
+Security Shirt,M,INV008,In Stock,Las Vegas,Security Desk
+Pit Boss Jacket,L,INV009,In Stock,Las Vegas,High Limit
+Cocktail Server Dress,M,INV010,In Stock,Las Vegas,Main Floor

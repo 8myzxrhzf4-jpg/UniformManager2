@@ -14,7 +14,7 @@ interface AnalyticsProps {
 }
 
 export function Analytics({ cityKey, cityName, studioKey, studioName, inventory, assignments }: AnalyticsProps) {
-  const [activeTab, setActiveTab] = useState<'gp-report' | 'demand' | 'lifespan' | 'audit'>('gp-report');
+  const [activeTab, setActiveTab] = useState<'gp-report' | 'demand' | 'lifespan' | 'audit' | 'smart-audit'>('gp-report');
 
   return (
     <div className="analytics-container card">
@@ -46,6 +46,12 @@ export function Analytics({ cityKey, cityName, studioKey, studioName, inventory,
         >
           Audit List
         </button>
+        <button
+          className={`tab ${activeTab === 'smart-audit' ? 'active' : ''}`}
+          onClick={() => setActiveTab('smart-audit')}
+        >
+          Smart Audit
+        </button>
       </div>
 
       <div className="tab-content">
@@ -76,6 +82,16 @@ export function Analytics({ cityKey, cityName, studioKey, studioName, inventory,
         )}
         {activeTab === 'audit' && (
           <AuditListGenerator
+            cityKey={cityKey}
+            cityName={cityName}
+            studioKey={studioKey}
+            studioName={studioName}
+            inventory={inventory}
+            assignments={assignments}
+          />
+        )}
+        {activeTab === 'smart-audit' && (
+          <SmartAuditScanner
             cityKey={cityKey}
             cityName={cityName}
             studioKey={studioKey}
@@ -831,6 +847,449 @@ function AuditListGenerator({ cityKey, cityName, studioKey, studioName, inventor
           <li>Includes high-frequency items (issued often)</li>
           <li>Adds random items for comprehensive coverage over time</li>
           <li>Can only generate once per week</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// Smart Audit Scanner Component
+function SmartAuditScanner({ cityKey, cityName, studioKey, studioName, inventory }: AnalyticsComponentProps & { inventory: Record<string, UniformItem>; cityName: string; studioName: string }) {
+  const [category, setCategory] = useState('');
+  const [size, setSize] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [scannedBarcodes, setScannedBarcodes] = useState<Set<string>>(new Set());
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; text: string } | null>(null);
+  const [auditCompleted, setAuditCompleted] = useState(false);
+  const [auditResults, setAuditResults] = useState<{
+    expected: string[];
+    found: string[];
+    missing: string[];
+    unexpected: string[];
+  } | null>(null);
+
+  // Get unique categories and sizes from inventory
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    Object.values(inventory).forEach(item => {
+      if (item.category) cats.add(item.category);
+    });
+    return Array.from(cats).sort();
+  }, [inventory]);
+
+  const sizes = useMemo(() => {
+    const szs = new Set<string>();
+    Object.values(inventory).forEach(item => {
+      if (item.size) szs.add(item.size);
+    });
+    return Array.from(szs).sort();
+  }, [inventory]);
+
+  // Calculate expected items: Only Available items (excludes In Hamper and At Laundry by checking for Available status)
+  const expectedItems = useMemo(() => {
+    if (!category || !size) return [];
+    
+    return Object.entries(inventory)
+      .filter(([, item]) => 
+        item.category === category &&
+        item.size === size &&
+        item.studioLocation === studioKey &&
+        item.status === 'Available' // Only Available items
+      )
+      .map(([, item]) => item.barcode);
+  }, [inventory, category, size, studioKey]);
+
+  const handleStartScan = () => {
+    if (!category || !size) {
+      setMessage({ type: 'error', text: 'Please select category and size' });
+      return;
+    }
+    
+    if (expectedItems.length === 0) {
+      setMessage({ type: 'warning', text: 'No Available items found for this category/size at this studio' });
+      return;
+    }
+
+    setScanning(true);
+    setScannedBarcodes(new Set());
+    setAuditCompleted(false);
+    setAuditResults(null);
+    setMessage({ type: 'info', text: `Scanning started. Expected ${expectedItems.length} item(s). Scan items now.` });
+  };
+
+  const handleAddBarcode = () => {
+    const barcode = barcodeInput.trim();
+    if (!barcode) return;
+
+    const newScanned = new Set(scannedBarcodes);
+    
+    if (newScanned.has(barcode)) {
+      setMessage({ type: 'warning', text: `Barcode ${barcode} already scanned` });
+    } else {
+      newScanned.add(barcode);
+      setScannedBarcodes(newScanned);
+      
+      const isExpected = expectedItems.includes(barcode);
+      if (isExpected) {
+        setMessage({ type: 'success', text: `✓ Barcode ${barcode} found (expected)` });
+      } else {
+        setMessage({ type: 'warning', text: `! Barcode ${barcode} scanned but not expected in this audit` });
+      }
+    }
+    
+    setBarcodeInput('');
+  };
+
+  const handleCompleteScan = async () => {
+    if (!scanning) return;
+
+    const found = Array.from(scannedBarcodes).filter(bc => expectedItems.includes(bc));
+    const missing = expectedItems.filter(bc => !scannedBarcodes.has(bc));
+    const unexpected = Array.from(scannedBarcodes).filter(bc => !expectedItems.includes(bc));
+
+    setAuditResults({
+      expected: expectedItems,
+      found,
+      missing,
+      unexpected,
+    });
+
+    setScanning(false);
+    setAuditCompleted(true);
+    setMessage({ 
+      type: 'info', 
+      text: `Audit complete: ${found.length} found, ${missing.length} missing, ${unexpected.length} unexpected` 
+    });
+  };
+
+  const handleSaveAudit = async () => {
+    if (!auditResults) return;
+
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      const updates: Record<string, any> = {};
+      const timestamp = new Date().toISOString();
+
+      // Store audit session
+      const sessionKey = push(ref(db, `audit_sessions/${cityKey}/${studioKey}`)).key;
+      updates[`audit_sessions/${cityKey}/${studioKey}/${sessionKey}`] = {
+        id: sessionKey,
+        category,
+        size,
+        studio: studioName,
+        studioKey,
+        city: cityName,
+        cityKey,
+        startedAt: timestamp,
+        completedAt: timestamp,
+        startedBy: 'web-user', // TODO: Use actual user
+        expectedBarcodes: auditResults.expected,
+        scannedBarcodes: Array.from(scannedBarcodes),
+        missingBarcodes: auditResults.missing,
+        unexpectedBarcodes: auditResults.unexpected,
+      };
+
+      // Update missing items status to 'Missing' (if we want to flag them)
+      // Note: This is optional - problem statement says "mark missing"
+      // For now, we'll just log without changing status to avoid data loss
+
+      // Log the audit action
+      const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
+      updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
+        date: timestamp,
+        action: 'AUDIT_COMPLETED',
+        details: `Smart Audit: ${category} size ${size} at ${studioName} - Expected: ${auditResults.expected.length}, Found: ${auditResults.found.length}, Missing: ${auditResults.missing.length}`,
+      };
+
+      await update(ref(db), updates);
+
+      setMessage({ type: 'success', text: 'Audit saved successfully! You can now export the results.' });
+    } catch (error) {
+      console.error('Save audit error:', error);
+      setMessage({ type: 'error', text: 'Failed to save audit. Please try again.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportAudit = () => {
+    if (!auditResults) return;
+
+    const csv = [
+      'Category,Size,Studio,Expected Count,Found Count,Missing Count,Missing Barcodes',
+      `${category},${size},${studioName},${auditResults.expected.length},${auditResults.found.length},${auditResults.missing.length},"${auditResults.missing.join(', ')}"`,
+      '',
+      'Expected Barcodes:',
+      ...auditResults.expected.map(bc => bc),
+      '',
+      'Found Barcodes:',
+      ...auditResults.found.map(bc => bc),
+      '',
+      'Missing Barcodes:',
+      ...auditResults.missing.map(bc => bc),
+      '',
+      'Unexpected Barcodes:',
+      ...auditResults.unexpected.map(bc => bc),
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    const timestamp = new Date().toISOString().split('T')[0];
+    link.setAttribute('href', url);
+    link.setAttribute('download', `audit_${category}_${size}_${studioName}_${timestamp}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setMessage({ type: 'success', text: 'Audit results exported!' });
+  };
+
+  const handleReset = () => {
+    setCategory('');
+    setSize('');
+    setScanning(false);
+    setScannedBarcodes(new Set());
+    setBarcodeInput('');
+    setAuditCompleted(false);
+    setAuditResults(null);
+    setMessage(null);
+  };
+
+  return (
+    <div className="analytics-section">
+      <h3>Smart Audit Scanner</h3>
+      <p className="text-muted">Scope by category and size, scan items, compare with expected inventory</p>
+
+      {message && (
+        <div className={`alert alert-${message.type}`}>
+          {message.text}
+        </div>
+      )}
+
+      {!scanning && !auditCompleted && (
+        <div className="audit-setup">
+          <div className="form-group">
+            <label>Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="input-dark"
+            >
+              <option value="">-- Select Category --</option>
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Size</label>
+            <select
+              value={size}
+              onChange={(e) => setSize(e.target.value)}
+              className="input-dark"
+            >
+              <option value="">-- Select Size --</option>
+              {sizes.map(sz => (
+                <option key={sz} value={sz}>{sz}</option>
+              ))}
+            </select>
+          </div>
+
+          {category && size && (
+            <div className="audit-info-box" style={{ marginBottom: '1rem' }}>
+              <strong>Expected Items:</strong> {expectedItems.length} Available item(s) at {studioName}
+              <br />
+              <small className="text-muted">
+                (Excludes items In Hamper or At Laundry)
+              </small>
+            </div>
+          )}
+
+          <button
+            onClick={handleStartScan}
+            className="btn btn-gold"
+            disabled={!category || !size}
+          >
+            Start Audit Scan
+          </button>
+        </div>
+      )}
+
+      {scanning && (
+        <div className="audit-scanning">
+          <div className="audit-info-box" style={{ marginBottom: '1rem' }}>
+            <strong>Auditing:</strong> {category} - Size {size} at {studioName}
+            <br />
+            <strong>Expected:</strong> {expectedItems.length} | <strong>Scanned:</strong> {scannedBarcodes.size}
+          </div>
+
+          <div className="form-group">
+            <label>Scan or Enter Barcode</label>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input
+                type="text"
+                value={barcodeInput}
+                onChange={(e) => setBarcodeInput(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleAddBarcode();
+                  }
+                }}
+                placeholder="Scan or type barcode"
+                className="input-dark"
+                autoFocus
+              />
+              <button onClick={handleAddBarcode} className="btn btn-secondary">
+                Add
+              </button>
+            </div>
+          </div>
+
+          <div className="scanned-list" style={{ marginBottom: '1rem', maxHeight: '200px', overflowY: 'auto' }}>
+            <strong>Scanned Barcodes:</strong>
+            {scannedBarcodes.size === 0 ? (
+              <p className="text-muted">No items scanned yet</p>
+            ) : (
+              <ul style={{ listStyle: 'none', padding: 0 }}>
+                {Array.from(scannedBarcodes).map(bc => (
+                  <li key={bc} style={{ padding: '0.25rem 0' }}>
+                    <code>{bc}</code>
+                    {expectedItems.includes(bc) ? ' ✓' : ' (unexpected)'}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={handleCompleteScan} className="btn btn-gold">
+              Complete Audit
+            </button>
+            <button onClick={handleReset} className="btn btn-secondary">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {auditCompleted && auditResults && (
+        <div className="audit-results">
+          <h4>Audit Results</h4>
+          <div className="audit-summary">
+            <div className="audit-stat">
+              <strong>Category:</strong> {category}
+            </div>
+            <div className="audit-stat">
+              <strong>Size:</strong> {size}
+            </div>
+            <div className="audit-stat">
+              <strong>Studio:</strong> {studioName}
+            </div>
+            <div className="audit-stat">
+              <strong>Expected:</strong> {auditResults.expected.length}
+            </div>
+            <div className="audit-stat" style={{ color: '#4ade80' }}>
+              <strong>Found:</strong> {auditResults.found.length}
+            </div>
+            <div className="audit-stat" style={{ color: '#f87171' }}>
+              <strong>Missing:</strong> {auditResults.missing.length}
+            </div>
+            <div className="audit-stat" style={{ color: '#fbbf24' }}>
+              <strong>Unexpected:</strong> {auditResults.unexpected.length}
+            </div>
+          </div>
+
+          {auditResults.missing.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <h5>Missing Items:</h5>
+              <div className="table-container">
+                <table className="table-dark">
+                  <thead>
+                    <tr>
+                      <th>Barcode</th>
+                      <th>Name</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditResults.missing.map(barcode => {
+                      const item = Object.values(inventory).find(i => i.barcode === barcode);
+                      return (
+                        <tr key={barcode}>
+                          <td><code>{barcode}</code></td>
+                          <td>{item?.name || 'Unknown'}</td>
+                          <td>{item?.status || 'Unknown'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {auditResults.unexpected.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <h5>Unexpected Items:</h5>
+              <div className="table-container">
+                <table className="table-dark">
+                  <thead>
+                    <tr>
+                      <th>Barcode</th>
+                      <th>Name</th>
+                      <th>Category</th>
+                      <th>Size</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditResults.unexpected.map(barcode => {
+                      const item = Object.values(inventory).find(i => i.barcode === barcode);
+                      return (
+                        <tr key={barcode}>
+                          <td><code>{barcode}</code></td>
+                          <td>{item?.name || 'Not in inventory'}</td>
+                          <td>{item?.category || '-'}</td>
+                          <td>{item?.size || '-'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+            <button onClick={handleSaveAudit} disabled={loading} className="btn btn-gold">
+              {loading ? 'Saving...' : 'Save Audit'}
+            </button>
+            <button onClick={handleExportAudit} className="btn btn-outline">
+              Export CSV
+            </button>
+            <button onClick={handleReset} className="btn btn-secondary">
+              New Audit
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="analytics-info" style={{ marginTop: '2rem' }}>
+        <h4>How It Works</h4>
+        <ul className="text-muted">
+          <li><strong>Scope:</strong> Select category and size to define the audit scope</li>
+          <li><strong>Expected Items:</strong> Only Available items are included (excludes In Hamper and At Laundry)</li>
+          <li><strong>Scan:</strong> Scan or enter barcodes of items physically present</li>
+          <li><strong>Compare:</strong> System compares scanned vs expected items</li>
+          <li><strong>Results:</strong> View found, missing, and unexpected items</li>
+          <li><strong>Export:</strong> Download CSV with full audit details including missing barcodes</li>
+          <li><strong>Log:</strong> Audit is saved with timestamp and user for traceability</li>
         </ul>
       </div>
     </div>

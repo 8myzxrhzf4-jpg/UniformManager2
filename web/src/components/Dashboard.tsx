@@ -286,6 +286,10 @@ export function Dashboard({ user }: DashboardProps) {
                   studioName={selectedStudioInfo?.name || ''}
                   inventory={inventory}
                   gps={gps}
+                  studios={cities[selectedCity].studios || {}}
+                  onRefresh={() => {
+                    // Trigger refresh by updating a dummy state if needed
+                  }}
                 />
               )}
 
@@ -299,6 +303,7 @@ export function Dashboard({ user }: DashboardProps) {
                   assignments={assignments}
                   laundryOrders={laundryOrders}
                   logs={logs}
+                  gamePresenters={gps}
                 />
               )}
 
