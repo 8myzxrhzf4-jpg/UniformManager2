@@ -5,7 +5,7 @@ import {
   signInWithPopup,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
-import { auth, googleProvider } from '../firebaseClient';
+import { auth, googleProvider } from '../firebase';
 import './Auth.css';
 
 export function Auth() {

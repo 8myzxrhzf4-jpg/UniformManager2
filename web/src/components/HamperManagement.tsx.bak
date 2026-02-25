@@ -20,13 +20,6 @@ export function HamperManagement({
   currentHamperCount,
   onRefresh,
 }: HamperManagementProps) {
-  if (!cityKey || String(cityKey).trim() === "") {
-    return (
-      <div className="operation-content">
-        <p className="empty-message">Please select a City and Studio from the sidebar to manage hampers.</p>
-      </div>
-    );
-  }
   const [isEditing, setIsEditing] = useState(false);
   const [newCapacity, setNewCapacity] = useState(hamperCapacity.toString());
   const [loading, setLoading] = useState(false);

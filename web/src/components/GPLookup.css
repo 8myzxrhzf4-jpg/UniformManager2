@@ -1,0 +1,250 @@
+.gp-lookup-container {
+  padding: 1.5rem;
+}
+
+.lookup-search-row {
+  display: flex;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+  align-items: center;
+}
+
+.lookup-input {
+  flex: 1;
+  font-size: 1rem;
+}
+
+.lookup-result {
+  margin-top: 1.5rem;
+}
+
+.gp-profile {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: var(--color-surface-2, rgba(255,255,255,0.05));
+  border: 1px solid var(--color-border, rgba(255,255,255,0.1));
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.gp-profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.gp-name {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--color-accent, #c9a84c);
+}
+
+.gp-id, .gp-city {
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #aaa);
+}
+
+.gp-stats {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.gp-stat {
+  text-align: center;
+}
+
+.gp-stat-value {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-accent, #c9a84c);
+}
+
+.gp-stat-label {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #aaa);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lookup-items-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.lookup-items-header h4 {
+  margin: 0;
+  color: var(--color-text, #eee);
+}
+
+.lookup-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lookup-item-card {
+  background: var(--color-surface-2, rgba(255,255,255,0.04));
+  border: 1px solid var(--color-border, rgba(255,255,255,0.08));
+  border-radius: 6px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.lookup-item-main {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.lookup-item-name {
+  font-weight: 600;
+  color: var(--color-text, #eee);
+}
+
+.lookup-item-size {
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #aaa);
+  background: rgba(255,255,255,0.07);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+}
+
+.lookup-item-barcode {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #aaa);
+}
+
+.lookup-item-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.lookup-reason-badge {
+  font-size: 0.75rem;
+  background: rgba(201, 168, 76, 0.15);
+  color: var(--color-accent, #c9a84c);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+}
+
+.lookup-studio {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #aaa);
+}
+
+.lookup-days {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #aaa);
+}
+
+.lookup-days.overdue {
+  color: #ef4444;
+}
+
+.no-items-message {
+  padding: 2rem;
+  text-align: center;
+}
+
+/* Loaner cards in Operations */
+.loaners-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.loaners-header h3 {
+  margin: 0;
+}
+
+.date-filter-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.loaners-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.loaner-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-surface-2, rgba(255,255,255,0.04));
+  border: 1px solid var(--color-border, rgba(255,255,255,0.08));
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  gap: 1rem;
+}
+
+.loaner-card.loaner-overdue {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.loaner-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+}
+
+.loaner-item-name {
+  font-weight: 600;
+  color: var(--color-text, #eee);
+}
+
+.loaner-barcode {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #aaa);
+}
+
+.loaner-reason-badge {
+  font-size: 0.75rem;
+  background: rgba(201, 168, 76, 0.15);
+  color: var(--color-accent, #c9a84c);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.loaner-days {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #aaa);
+}
+
+.loaner-days.overdue {
+  color: #ef4444;
+}
+
+.condition-warning {
+  color: #ef4444 !important;
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.btn-small {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.82rem;
+}
+
