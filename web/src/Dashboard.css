@@ -347,3 +347,51 @@
     justify-content: space-between;
   }
 }
+
+
+/* ===== Modern Tabs ===== */
+
+.modern-tabs {
+  display: flex;
+  gap: 28px;
+  border-bottom: 1px solid var(--color-border, #374151);
+  align-items: center;
+  padding-bottom: 8px;
+}
+
+.modern-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--color-text-secondary, #9ca3af);
+  transition: color 0.18s ease, transform 0.06s ease;
+  gap: 10px;
+}
+
+.modern-tab svg { display: block; opacity: 0.92; }
+
+.modern-tab:hover {
+  color: var(--color-text-primary, #e5e7eb);
+  transform: translateY(-1px);
+}
+
+.modern-tab.active {
+  color: var(--color-accent, #fbbf24); /* gold */
+}
+
+.tab-underline {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--color-accent, #fbbf24);
+  border-radius: 2px;
+}

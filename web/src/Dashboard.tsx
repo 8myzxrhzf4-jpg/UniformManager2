@@ -10,6 +10,7 @@ import { HamperManagement } from './HamperManagement';
 import { Analytics } from './Analytics';
 import './Dashboard.css';
 
+import { Package, Wrench, Repeat, ArrowLeftRight, BarChart3 } from 'lucide-react';
 interface DashboardProps {
   user: User;
 }
@@ -188,17 +189,33 @@ export function Dashboard({ user }: DashboardProps) {
 
               {/* Navigation Tabs */}
               <div className="view-tabs card">
-                <div className="tabs">
-                  {(['inventory', 'operations', 'import-export', 'analytics'] as const).map(view => (
-                    <button
-                      key={view}
-                      className={`tab ${activeView === view ? 'active' : ''}`}
-                      onClick={() => setActiveView(view)}
-                    >
-                      {view === 'import-export' ? 'Import/Export' : view.charAt(0).toUpperCase() + view.slice(1)}
-                    </button>
-                  ))}
-                </div>
+                <div className="tabs modern-tabs">
+  {[
+    { id: 'inventory', label: 'Inventory', icon: Package },
+    { id: 'operations', label: 'Operations', icon: Wrench },
+    { id: 'loaners', label: 'Loaners', icon: Repeat },
+    { id: 'import-export', label: 'Import/Export', icon: ArrowLeftRight },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+  ].map(tab => {
+    const Icon = tab.icon;
+    const isActive = activeView === tab.id;
+
+    return (
+      <button
+        key={tab.id}
+        className={`tab modern-tab ${isActive ? 'active' : ''}`}
+        onClick={() => setActiveView(tab.id as any)}
+        aria-pressed={isActive}
+        type="button"
+        title={tab.label}
+      >
+        <Icon size={18} strokeWidth={2} />
+        <span>{tab.label}</span>
+        {isActive && <div className="tab-underline" />}
+      </button>
+    );
+  })}
+</div>
               </div>
 
               {/* ── INVENTORY ── */}
