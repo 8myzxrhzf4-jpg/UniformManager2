@@ -9,8 +9,8 @@ import { ImportExport } from './ImportExport';
 import { HamperManagement } from './HamperManagement';
 import { Analytics } from './Analytics';
 import './Dashboard.css';
-
 import { Package, Wrench, Repeat, ArrowLeftRight, BarChart3 } from 'lucide-react';
+
 interface DashboardProps {
   user: User;
 }
@@ -19,7 +19,7 @@ export function Dashboard({ user }: DashboardProps) {
   const { cities, loading: citiesLoading } = useCities();
   const [selectedCity, setSelectedCity] = useState<string | null>(null);
   const [selectedStudio, setSelectedStudio] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'inventory' | 'operations' | 'import-export' | 'analytics'>('inventory');
+  const [activeView, setActiveView] = useState<'inventory' | 'operations' | 'loaners' | 'import-export' | 'analytics'>('inventory');
 
   // useInventory subscribes to inventory/{cityKey} — cityKey is the Firebase key
   // which from the database is "Atlantic City" (with space, as stored by Android app)
@@ -190,32 +190,34 @@ export function Dashboard({ user }: DashboardProps) {
               {/* Navigation Tabs */}
               <div className="view-tabs card">
                 <div className="tabs modern-tabs">
-  {[
-    { id: 'inventory', label: 'Inventory', icon: Package },
-    { id: 'operations', label: 'Operations', icon: Wrench },
-    { id: 'loaners', label: 'Loaners', icon: Repeat },
-    { id: 'import-export', label: 'Import/Export', icon: ArrowLeftRight },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-  ].map(tab => {
-    const Icon = tab.icon;
-    const isActive = activeView === tab.id;
+                  {[
+                    { id: 'inventory', label: 'Inventory', icon: Package },
+                    { id: 'operations', label: 'Operations', icon: Wrench },
+                    { id: 'loaners', label: 'Loaners', icon: Repeat },
+                    { id: 'import-export', label: 'Import/Export', icon: ArrowLeftRight },
+                    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+                  ].map(tab => {
+                    const Icon = tab.icon;
+                    const isActive = activeView === tab.id;
 
-    return (
-      <button
-        key={tab.id}
-        className={`tab modern-tab ${isActive ? 'active' : ''}`}
-        onClick={() => setActiveView(tab.id as any)}
-        aria-pressed={isActive}
-        type="button"
-        title={tab.label}
-      >
-        <Icon size={18} strokeWidth={2} />
-        <span>{tab.label}</span>
-        {isActive && <div className="tab-underline" />}
-      </button>
-    );
-  })}
-</div>
+                    return (
+                      <button
+                        key={tab.id}
+                        className={`tab modern-tab ${isActive ? 'active' : ''}`}
+                        onClick={() => setActiveView(tab.id as any)}
+                        aria-pressed={isActive}
+                        type="button"
+                        title={tab.label}
+                      >
+                        <Icon size={18} strokeWidth={2} />
+                        <span>{tab.label}</span>
+                        {isActive && <div className="tab-underline" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+                </div>
               </div>
 
               {/* ── INVENTORY ── */}
