@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ref, onValue, off, query, limitToLast } from 'firebase/database';
 import { db } from './firebase';
-import type { City, UniformItem, LogEntry, Assignment, LaundryOrder, GamePresenter, WeeklyAuditList, AuditHistoryEntry } from './types';
+import type { City, UniformItem, LogEntry, Assignment, LaundryOrder, GamePresenter, WeeklyAuditList, AuditHistoryEntry, UserRecord } from './types';
 
 /**
  * Hook to subscribe to cities data
@@ -197,6 +197,29 @@ export function useAssignments(cityName: string | null) {
 }
 
 /**
+ * Hook to subscribe to ALL assignments across all cities (for GP lookup)
+ */
+export function useAllAssignments() {
+  const [assignments, setAssignments] = useState<Record<string, Record<string, Assignment>>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const assignmentsRef = ref(db, 'assignments');
+    const unsub = onValue(
+      assignmentsRef,
+      (snapshot) => {
+        setAssignments(snapshot.val() || {});
+        setLoading(false);
+      },
+      () => setLoading(false)
+    );
+    return unsub;
+  }, []);
+
+  return { assignments, loading };
+}
+
+/**
  * Hook to subscribe to laundry orders for a specific city
  * Limited to the last 200 entries to optimize for Spark plan
  */
@@ -315,4 +338,26 @@ export function useAuditHistory(cityName: string | null, studioName: string | nu
 
   return { auditHistory, loading, error };
 }
- 
+
+/**
+ * Hook to subscribe to all user records (for admin approval panel)
+ */
+export function useUserRecords() {
+  const [users, setUsers] = useState<Record<string, UserRecord>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const usersRef = ref(db, 'users');
+    const unsub = onValue(
+      usersRef,
+      (snapshot) => {
+        setUsers(snapshot.val() || {});
+        setLoading(false);
+      },
+      () => setLoading(false)
+    );
+    return unsub;
+  }, []);
+
+  return { users, loading };
+}

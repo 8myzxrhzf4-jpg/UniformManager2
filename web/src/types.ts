@@ -13,6 +13,9 @@ export type UniformStatus =
 // Valid role types
 export type UserRole = 'Super User' | 'Admin' | 'Staff' | 'Auditor';
 
+// Account approval status
+export type AccountStatus = 'pending' | 'approved' | 'rejected';
+
 export interface Studio {
   name: string;
   hamperCapacity: number;
@@ -22,6 +25,7 @@ export interface Studio {
 export interface City {
   name: string;
   studios: Record<string, Studio>;
+  laundryEnabled?: boolean; // If false, returned items go directly back to Available
 }
 
 export interface UniformItem {
@@ -63,6 +67,19 @@ export interface User {
   role: UserRole;
   city?: string;      // For non-Super users, their assigned city
   studios?: string[]; // For non-Super users, their assigned studios
+}
+
+// Pending/approved user record stored in Firebase
+export interface UserRecord {
+  uid: string;
+  email: string;
+  displayName?: string;
+  role: UserRole;
+  status: AccountStatus;
+  requestedAt: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  assignedCities?: string[]; // City keys the user can access
 }
 
 // Assignment tracking

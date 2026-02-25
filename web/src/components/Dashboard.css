@@ -191,6 +191,23 @@
   border: 1px solid var(--color-border);
 }
 
+/* ─── STATUS BADGES ────────────────────────────────────────────────────────────
+   Classes are generated dynamically from the status value:
+     item.status.toLowerCase().replace(/\s+/g, '-')
+
+   Firebase stores these exact status strings (confirmed from DB screenshot):
+     "Available"  → .status-available
+     "Issued"     → .status-issued
+     "In Hamper"  → .status-in-hamper
+     "At Laundry" → .status-at-laundry
+     "Damaged"    → .status-damaged
+     "Lost"       → .status-lost
+
+   Legacy values also covered for backward compatibility:
+     "In Stock"   → .status-in-stock   (old Android value, normalized to Available)
+     "In Laundry" → .status-in-laundry (old backend value, replaced by At Laundry)
+─────────────────────────────────────────────────────────────────────────────── */
+
 .status-badge {
   display: inline-block;
   padding: 0.25rem 0.625rem;
@@ -199,35 +216,62 @@
   font-weight: 600;
 }
 
-.status-in-stock {
+/* ✅ Available — green (primary in-service status from Firebase) */
+.status-available {
   background-color: rgba(16, 185, 129, 0.2);
   color: var(--color-success);
   border: 1px solid var(--color-success);
 }
 
+/* ✅ Issued — amber */
 .status-issued {
   background-color: rgba(245, 158, 11, 0.2);
   color: var(--color-warning);
   border: 1px solid var(--color-warning);
 }
 
-.status-in-laundry {
+/* ✅ In Hamper — blue (returned, awaiting laundry pickup) */
+.status-in-hamper {
   background-color: rgba(59, 130, 246, 0.2);
   color: var(--color-info);
   border: 1px solid var(--color-info);
 }
 
+/* ✅ At Laundry — purple/grey (picked up by laundry) */
+.status-at-laundry {
+  background-color: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+  border: 1px solid #a78bfa;
+}
+
+/* ✅ Damaged — red */
 .status-damaged {
   background-color: rgba(239, 68, 68, 0.2);
   color: var(--color-error);
   border: 1px solid var(--color-error);
 }
 
+/* ✅ Lost — red (same visual weight as damaged) */
 .status-lost {
   background-color: rgba(239, 68, 68, 0.2);
   color: var(--color-error);
   border: 1px solid var(--color-error);
 }
+
+/* Legacy aliases — kept for backward compatibility */
+.status-in-stock {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
+}
+
+.status-in-laundry {
+  background-color: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+  border: 1px solid #a78bfa;
+}
+
+/* ─── LOGS ──────────────────────────────────────────────────────────────────── */
 
 .logs-list {
   display: flex;
@@ -269,6 +313,8 @@
   line-height: 1.4;
 }
 
+/* ─── TABS ─────────────────────────────────────────────────────────────────── */
+
 .view-tabs {
   margin-bottom: var(--spacing-lg);
   padding: var(--spacing-md);
@@ -278,23 +324,7 @@
   margin: 0;
 }
 
-.analytics-placeholder {
-  padding: var(--spacing-xl);
-}
-
-.analytics-placeholder h2 {
-  margin: 0 0 var(--spacing-md) 0;
-}
-
-.analytics-placeholder ul {
-  margin: var(--spacing-md) 0;
-  padding-left: var(--spacing-xl);
-}
-
-.analytics-placeholder li {
-  margin-bottom: var(--spacing-sm);
-  line-height: 1.6;
-}
+/* ─── RESPONSIVE ───────────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
   .dashboard-content {
@@ -316,4 +346,96 @@
     width: 100%;
     justify-content: space-between;
   }
+}
+
+/* ─── HEADER BRAND ─────────────────────────────────────────────────────────── */
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.header-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--color-accent);
+  flex-shrink: 0;
+}
+
+.user-role-badge {
+  background: rgba(212,175,55,0.15);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-xl);
+  padding: 0.15rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ─── SIDEBAR NAV ───────────────────────────────────────────────────────────── */
+
+.sidebar-nav {
+  margin-top: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.sidebar-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.625rem 1rem;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-base);
+}
+
+.sidebar-nav-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.sidebar-nav-btn.active {
+  border-color: var(--color-accent);
+  background: rgba(212,175,55,0.1);
+  color: var(--color-accent);
+}
+
+.sidebar-badge {
+  margin-left: auto;
+  background: var(--color-error);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── LAUNDRY OFF BANNER ────────────────────────────────────────────────────── */
+
+.laundry-off-banner {
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--color-warning);
+  margin-bottom: var(--spacing-sm);
 }
