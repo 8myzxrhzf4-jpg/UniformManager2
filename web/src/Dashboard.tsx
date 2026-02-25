@@ -1,14 +1,7 @@
-/* src/components/Dashboard.tsx — FIXED
-   KEY CHANGES FROM ORIGINAL:
-   1. Imports auth from '../firebase' instead of '../firebaseClient'
-   2. Studio filter now compares item.studioLocation (a display name like "Ocean")
-      against the selected studio's name — not against its Firebase key.
-      The old code compared against the key which never matched anything,
-      causing inventory to always appear empty when a studio was selected.
-*/
-import { useState, useMemo } from 'react';
+[PASTE THE CONTENT FROM THE Dashboard.tsx BLOCK ABOVE HERE, EXACTLY]import { useState, useMemo } from 'react';
 import { signOut } from 'firebase/auth';
 import type { User } from 'firebase/auth';
+// ✅ Importing from firebase.ts — firebaseClient.ts can now be deleted
 import { auth } from '../firebase';
 import { useCities, useInventory, useLogs, useGamePresenters, useAssignments, useLaundryOrders } from '../hooks';
 import { Operations } from './Operations';
@@ -27,27 +20,16 @@ export function Dashboard({ user }: DashboardProps) {
   const [selectedStudio, setSelectedStudio] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'inventory' | 'operations' | 'import-export' | 'analytics'>('inventory');
 
-  // Resolve the studio display name from its Firebase key.
-  // e.g. selectedStudio = "-N8xyz123" → studioDisplayName = "Ocean"
-  // This is what's stored in item.studioLocation in Firebase.
-  const studioDisplayName = useMemo(() => {
-    if (!selectedCity || !selectedStudio) return null;
-    return cities[selectedCity]?.studios?.[selectedStudio]?.name ?? null;
-  }, [cities, selectedCity, selectedStudio]);
-
-  const selectedStudioInfo = useMemo(() => {
-    if (!selectedCity || !selectedStudio) return null;
-    return cities[selectedCity]?.studios?.[selectedStudio] ?? null;
-  }, [cities, selectedCity, selectedStudio]);
-
-  // Data hooks
+  // useInventory subscribes to inventory/{cityKey} — cityKey is the Firebase key
+  // which from the database is "Atlantic City" (with space, as stored by Android app)
   const { inventory, loading: inventoryLoading } = useInventory(selectedCity);
-  const { logs, loading: logsLoading } = useLogs(selectedCity, studioDisplayName);
-  const { gps } = useGamePresenters(selectedCity);
+  const { logs, loading: logsLoading } = useLogs(selectedCity, selectedStudioName());
+  const { gps } = useGamePresenters();
   const { assignments } = useAssignments(selectedCity);
   const { laundryOrders } = useLaundryOrders(selectedCity);
 
-  // Derived lists
+  // ─── DERIVED DATA ───────────────────────────────────────────────────────────
+
   const cityList = useMemo(() =>
     Object.entries(cities).map(([key, city]) => ({ key, name: city.name })),
   [cities]);
@@ -60,30 +42,56 @@ export function Dashboard({ user }: DashboardProps) {
     }));
   }, [cities, selectedCity]);
 
-  // Filter inventory by studio display name (not Firebase key)
+  // The display name of the selected studio (e.g. "Ocean")
+  // studioLocation in Firebase is stored as a display name, NOT a Firebase key.
+  // BUG FIX: the old code compared item.studioLocation === selectedStudio where
+  // selectedStudio was a Firebase key like "-N8xyz". This never matched.
+  // Now we resolve the display name and compare against that.
+  function selectedStudioName(): string | null {
+    if (!selectedCity || !selectedStudio) return null;
+    return cities[selectedCity]?.studios?.[selectedStudio]?.name ?? null;
+  }
+
+  const selectedStudioInfo = useMemo(() => {
+    if (!selectedCity || !selectedStudio || !cities[selectedCity]) return null;
+    return cities[selectedCity].studios?.[selectedStudio] ?? null;
+  }, [cities, selectedCity, selectedStudio]);
+
+  // Filter inventory by studio display name, not by Firebase key
   const inventoryItems = useMemo(() => {
-    const all = Object.entries(inventory).map(([key, item]) => ({ key, ...item }));
-    if (!studioDisplayName) return all; // no studio selected → show all
-    return all.filter(item =>
-      (item.studioLocation ?? '').trim().toLowerCase() === studioDisplayName.trim().toLowerCase()
+    const allItems = Object.entries(inventory).map(([key, item]) => ({ key, ...item }));
+    const studioName = selectedStudioName();
+
+    if (!studioName) {
+      // No studio selected — show all items for the city
+      return allItems;
+    }
+
+    // Compare studioLocation (stored as display name e.g. "Ocean") to studio name
+    return allItems.filter(item =>
+      item.studioLocation?.trim().toLowerCase() === studioName.trim().toLowerCase()
     );
-  }, [inventory, studioDisplayName]);
+  }, [inventory, selectedCity, selectedStudio, cities]);
 
-  const logEntries = useMemo(() =>
-    Object.entries(logs)
+  const logEntries = useMemo(() => {
+    return Object.entries(logs)
       .map(([key, log]) => ({ key, ...log }))
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-  [logs]);
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [logs]);
 
-  // Handlers
+  // ─── HANDLERS ───────────────────────────────────────────────────────────────
+
   const handleSignOut = async () => {
-    try { await signOut(auth); } catch (e) { console.error('Sign out error:', e); }
+    try { await signOut(auth); }
+    catch (error) { console.error('Sign out error:', error); }
   };
 
   const handleCityChange = (cityKey: string) => {
     setSelectedCity(cityKey || null);
     setSelectedStudio(null);
   };
+
+  // ─── RENDER ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="dashboard">
@@ -92,16 +100,18 @@ export function Dashboard({ user }: DashboardProps) {
           <h1>Uniform Manager</h1>
           <div className="user-info">
             <span className="user-email">{user.email}</span>
-            <button onClick={handleSignOut} className="btn btn-secondary">Sign Out</button>
+            <button onClick={handleSignOut} className="btn btn-secondary">
+              Sign Out
+            </button>
           </div>
         </div>
       </header>
 
       <div className="dashboard-content">
-        {/* ── SIDEBAR ── */}
         <aside className="sidebar">
           <div className="selector-section">
             <h3>Select Location</h3>
+
             {citiesLoading ? (
               <p>Loading cities...</p>
             ) : cityList.length === 0 ? (
@@ -118,7 +128,9 @@ export function Dashboard({ user }: DashboardProps) {
                   >
                     <option value="">Select a city...</option>
                     {cityList.map(city => (
-                      <option key={city.key} value={city.key}>{city.name}</option>
+                      <option key={city.key} value={city.key}>
+                        {city.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -134,17 +146,26 @@ export function Dashboard({ user }: DashboardProps) {
                     >
                       <option value="">All Studios</option>
                       {studioList.map(studio => (
-                        <option key={studio.key} value={studio.key}>{studio.name}</option>
+                        <option key={studio.key} value={studio.key}>
+                          {studio.name}
+                        </option>
                       ))}
                     </select>
                   </div>
+                )}
+
+                {/* Debug helper — remove before production */}
+                {selectedCity && inventoryItems.length === 0 && !inventoryLoading && (
+                  <p className="empty-message" style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
+                    No items found. City key in use: "<strong>{selectedCity}</strong>"
+                    {selectedStudioName() && <> | Studio filter: "<strong>{selectedStudioName()}</strong>"</>}
+                  </p>
                 )}
               </>
             )}
           </div>
         </aside>
 
-        {/* ── MAIN ── */}
         <main className="main-content">
           {!selectedCity ? (
             <div className="empty-state">
@@ -153,6 +174,7 @@ export function Dashboard({ user }: DashboardProps) {
             </div>
           ) : (
             <>
+              {/* Hamper Management — shown when a specific studio is selected */}
               {selectedStudio && selectedStudioInfo && (
                 <HamperManagement
                   cityKey={selectedCity}
@@ -164,20 +186,16 @@ export function Dashboard({ user }: DashboardProps) {
                 />
               )}
 
+              {/* Navigation Tabs */}
               <div className="view-tabs card">
                 <div className="tabs">
-                  {([
-                    { id: 'inventory',     label: 'Inventory'     },
-                    { id: 'operations',    label: 'Operations'    },
-                    { id: 'import-export', label: 'Import/Export' },
-                    { id: 'analytics',     label: 'Analytics'     },
-                  ] as const).map(({ id, label }) => (
+                  {(['inventory', 'operations', 'import-export', 'analytics'] as const).map(view => (
                     <button
-                      key={id}
-                      className={`tab ${activeView === id ? 'active' : ''}`}
-                      onClick={() => setActiveView(id)}
+                      key={view}
+                      className={`tab ${activeView === view ? 'active' : ''}`}
+                      onClick={() => setActiveView(view)}
                     >
-                      {label}
+                      {view === 'import-export' ? 'Import/Export' : view.charAt(0).toUpperCase() + view.slice(1)}
                     </button>
                   ))}
                 </div>
@@ -191,8 +209,8 @@ export function Dashboard({ user }: DashboardProps) {
                       Inventory
                       {!inventoryLoading && (
                         <span style={{ fontSize: '0.875rem', fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: '0.75rem' }}>
-                          ({inventoryItems.length} item{inventoryItems.length !== 1 ? 's' : ''}
-                          {studioDisplayName ? ` · ${studioDisplayName}` : ` · ${cities[selectedCity]?.name}`})
+                          ({inventoryItems.length} items
+                          {selectedStudioName() ? ` in ${selectedStudioName()}` : ` in ${cities[selectedCity]?.name}`})
                         </span>
                       )}
                     </h2>
@@ -201,7 +219,10 @@ export function Dashboard({ user }: DashboardProps) {
                       <p>Loading inventory...</p>
                     ) : inventoryItems.length === 0 ? (
                       <p className="empty-message">
-                        No inventory items found{studioDisplayName ? ` for studio "${studioDisplayName}"` : ''}.
+                        No inventory items found
+                        {selectedStudioName()
+                          ? ` for studio "${selectedStudioName()}"`
+                          : ` for ${cities[selectedCity]?.name}`}.
                       </p>
                     ) : (
                       <div className="table-container">
@@ -222,7 +243,14 @@ export function Dashboard({ user }: DashboardProps) {
                                 <td>{item.size}</td>
                                 <td><code className="barcode">{item.barcode}</code></td>
                                 <td>
-                                  <span className={`status-badge status-${(item.status ?? '').toLowerCase().replace(/\s+/g, '-')}`}>
+                                  {/* CSS class is generated from status value:
+                                      "Available"  → .status-available   ✅
+                                      "In Hamper"  → .status-in-hamper   ✅
+                                      "At Laundry" → .status-at-laundry  ✅
+                                      "Issued"     → .status-issued      ✅
+                                      "Damaged"    → .status-damaged     ✅
+                                      "Lost"       → .status-lost        ✅  */}
+                                  <span className={`status-badge status-${item.status?.toLowerCase().replace(/\s+/g, '-')}`}>
                                     {item.status}
                                   </span>
                                 </td>
@@ -269,11 +297,11 @@ export function Dashboard({ user }: DashboardProps) {
                   inventory={inventory}
                   gps={gps}
                   studios={cities[selectedCity].studios || {}}
-                  onRefresh={() => {}}
+                  onRefresh={() => {/* hooks auto-refresh via onValue */}}
                 />
               )}
 
-              {/* ── IMPORT/EXPORT ── */}
+              {/* ── IMPORT / EXPORT ── */}
               {activeView === 'import-export' && (
                 <ImportExport
                   cityKey={selectedCity}
@@ -306,4 +334,3 @@ export function Dashboard({ user }: DashboardProps) {
     </div>
   );
 }
-

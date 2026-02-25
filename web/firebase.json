@@ -1,0 +1,5 @@
+{
+  "database": {
+    "rules": "rtdb.rules.json"
+  }
+}

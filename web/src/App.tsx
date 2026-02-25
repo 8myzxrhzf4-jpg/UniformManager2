@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
-import { auth } from './firebaseClient';
+import { auth } from './firebase';
 import { Auth } from './components/Auth';
 import { Dashboard } from './components/Dashboard';
 import './App.css';

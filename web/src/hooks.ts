@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ref, onValue, off, query, limitToLast } from 'firebase/database';
-import { db } from './firebaseClient';
+import { db } from './firebase';
 import type { City, UniformItem, LogEntry, Assignment, LaundryOrder, GamePresenter, WeeklyAuditList, AuditHistoryEntry } from './types';
 
 /**
@@ -18,7 +18,18 @@ export function useCities() {
       citiesRef,
       (snapshot) => {
         const data = snapshot.val();
-        setCities(data || {});
+        const raw = data || {};
+        Object.values(raw).forEach((city: any) => {
+          if (Array.isArray(city.studios)) {
+            const keyed: any = {};
+            city.studios.forEach((s: any) => {
+              const k = s.name.toLowerCase().replace(/\s+/g, "_");
+              keyed[k] = s;
+            });
+            city.studios = keyed;
+          }
+        });
+        setCities(raw);
         setLoading(false);
       },
       (err) => {
@@ -50,9 +61,10 @@ export function useInventory(cityName: string | null) {
       return;
     }
 
+    console.log("[hooks] useInventory cityName =", cityName);
     const inventoryRef = ref(db, `inventory/${cityName}`);
     
-    onValue(
+    const unsub = onValue(
       inventoryRef,
       (snapshot) => {
         const data = snapshot.val();
@@ -65,9 +77,7 @@ export function useInventory(cityName: string | null) {
       }
     );
 
-    return () => {
-      off(inventoryRef);
-    };
+    return unsub;
   }, [cityName]);
 
   return { inventory, loading, error };
@@ -116,13 +126,14 @@ export function useLogs(cityName: string | null, studioName: string | null) {
 /**
  * Hook to subscribe to game presenters (GPs)
  */
-export function useGamePresenters() {
+export function useGamePresenters(cityName?: string | null) {
   const [gps, setGps] = useState<Record<string, GamePresenter>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    const gpsRef = ref(db, 'gps');
+    const path = cityName ? `gamePresenters/${cityName}` : 'gamePresenters';
+    const gpsRef = ref(db, path);
     
     onValue(
       gpsRef,
@@ -140,7 +151,7 @@ export function useGamePresenters() {
     return () => {
       off(gpsRef);
     };
-  }, []);
+  }, [cityName]);
 
   return { gps, loading, error };
 }
@@ -304,3 +315,4 @@ export function useAuditHistory(cityName: string | null, studioName: string | nu
 
   return { auditHistory, loading, error };
 }
+ 
