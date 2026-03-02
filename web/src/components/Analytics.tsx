@@ -580,7 +580,58 @@ function getItemCategory(item: UniformItem): string {
   return item.name || (item as any).category || 'Other';
 }
 
-// ─── CAO SMART AUDIT SYSTEM ──────────────────────────────────────────────────
+// ─── SHRINKAGE PIE CHART ─────────────────────────────────────────────────────
+
+interface ShrinkageSlice {
+  label: string;
+  count: number;
+  color: string;
+}
+
+function ShrinkagePieChart({ slices }: { slices: ShrinkageSlice[] }) {
+  const total = slices.reduce((s, sl) => s + sl.count, 0);
+  if (total === 0) return <p className="text-muted">No inventory data for this studio.</p>;
+
+  const size = 180;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 70;
+
+  let cumAngle = -Math.PI / 2;
+  const paths: { d: string; color: string; label: string; pct: string }[] = [];
+
+  for (const sl of slices) {
+    if (sl.count === 0) continue;
+    const angle = (sl.count / total) * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(cumAngle);
+    const y1 = cy + r * Math.sin(cumAngle);
+    const x2 = cx + r * Math.cos(cumAngle + angle);
+    const y2 = cy + r * Math.sin(cumAngle + angle);
+    const largeArc = angle > Math.PI ? 1 : 0;
+    const d = `M${cx},${cy} L${x1.toFixed(2)},${y1.toFixed(2)} A${r},${r} 0 ${largeArc},1 ${x2.toFixed(2)},${y2.toFixed(2)} Z`;
+    paths.push({ d, color: sl.color, label: sl.label, pct: ((sl.count / total) * 100).toFixed(1) });
+    cumAngle += angle;
+  }
+
+  return (
+    <div className="shrinkage-chart-wrap">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrinkage-pie">
+        {paths.map((p, i) => <path key={i} d={p.d} fill={p.color} stroke="var(--color-bg-card)" strokeWidth="2" />)}
+      </svg>
+      <div className="shrinkage-legend">
+        {slices.filter(sl => sl.count > 0).map(sl => (
+          <div key={sl.label} className="shrinkage-legend-item">
+            <span className="shrinkage-legend-dot" style={{ background: sl.color }} />
+            <span className="shrinkage-legend-label">{sl.label}</span>
+            <span className="shrinkage-legend-val">{sl.count} ({((sl.count / total) * 100).toFixed(1)}%)</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
 //
 // Stage flow:
 //   'generate'  → show risk formula, click "Generate This Week's Audit"
@@ -628,6 +679,65 @@ function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, ass
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const currentWeek = getWeekString();
+
+  // ── Shrinkage report data ─────────────────────────────────────────────────
+  const shrinkageSlices = useMemo((): ShrinkageSlice[] => {
+    if (stage !== 'results' || completedResults.length === 0) return [];
+
+    const allMissingBarcodes = new Set(
+      completedResults.flatMap(r => r.expectedBarcodes.filter(bc => !r.scanned.includes(bc)))
+    );
+    const allFoundBarcodes = new Set(
+      completedResults.flatMap(r => r.scanned.filter(bc => r.expectedBarcodes.includes(bc)))
+    );
+
+    // Pre-compute normalised studio identifiers once
+    const studioNameNorm = studioName.trim().toLowerCase();
+    const studioKeyNorm  = studioKey.trim().toLowerCase();
+
+    const isLaundry  = (st: string) => st === 'in hamper' || st === 'at laundry';
+    const isDamaged  = (st: string) => st === 'damaged'   || st === 'lost';
+
+    // Studio inventory: all items whose studioLocation matches this studio
+    const studioItems = Object.values(inventory).filter(item => {
+      const loc = (item.studioLocation || '').trim().toLowerCase();
+      return loc === studioNameNorm || loc === studioKeyNorm;
+    });
+
+    // Build barcode → item map for O(1) lookups
+    const barcodeMap = new Map(studioItems.map(i => [i.barcode, i]));
+
+    let foundCount   = allFoundBarcodes.size;
+    let holdingCount = 0;  // Available but not physically found during audit
+    let laundryCount = 0;  // In Hamper or At Laundry
+    let damagedCount = 0;  // Damaged or Lost
+
+    // Categorize missing audit items by their DB status
+    allMissingBarcodes.forEach(bc => {
+      const item = barcodeMap.get(bc);
+      if (!item) return;
+      const st = (item.status || '').toLowerCase();
+      if (isLaundry(st))       laundryCount++;
+      else if (isDamaged(st))  damagedCount++;
+      else                     holdingCount++; // Available/In Stock but not physically found
+    });
+
+    // Add any studio items outside the audit scope that are in laundry or damaged
+    studioItems.forEach(item => {
+      if (!allMissingBarcodes.has(item.barcode) && !allFoundBarcodes.has(item.barcode)) {
+        const st = (item.status || '').toLowerCase();
+        if (isLaundry(st))      laundryCount++;
+        else if (isDamaged(st)) damagedCount++;
+      }
+    });
+
+    return [
+      { label: 'Found / Accounted For',    count: foundCount,   color: 'var(--color-success)' },
+      { label: 'Uniform Holding (Missing)', count: holdingCount, color: 'var(--color-warning)' },
+      { label: 'Laundry',                   count: laundryCount, color: '#4a9eff' },
+      { label: 'Damaged / Lost',            count: damagedCount, color: 'var(--color-error)' },
+    ];
+  }, [stage, completedResults, inventory, studioName, studioKey]);
 
   const loadPastSessions = async () => {
     if (sessionsLoaded) return;
@@ -1013,6 +1123,17 @@ function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, ass
               </tbody>
             </table>
           </div>
+
+          {/* ── SHRINKAGE REPORT ── */}
+          {shrinkageSlices.some(s => s.count > 0) && (
+            <div className="shrinkage-report" style={{ marginTop: '1.5rem' }}>
+              <h4 className="shrinkage-title">📊 Shrinkage Report</h4>
+              <p className="text-muted" style={{ fontSize: '0.82rem', marginBottom: '0.75rem' }}>
+                Inventory disposition breakdown for <strong>{studioName}</strong> based on this audit's scope.
+              </p>
+              <ShrinkagePieChart slices={shrinkageSlices} />
+            </div>
+          )}
 
           <div className="cao-results-actions">
             <button onClick={saveAudit} disabled={saving} className="btn btn-gold">

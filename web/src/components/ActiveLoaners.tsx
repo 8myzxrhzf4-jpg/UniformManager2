@@ -4,8 +4,6 @@ import { db } from '../firebase';
 import type { Assignment, UniformItem } from '../types';
 import './ActiveLoaners.css';
 
-const CURRENT_USER = 'web-user';
-
 interface ActiveLoanersProps {
   assignments: Record<string, Assignment>;
   inventory: Record<string, UniformItem>;
@@ -15,6 +13,7 @@ interface ActiveLoanersProps {
   studios?: Record<string, any>;
   laundryEnabled?: boolean;
   onRefresh?: () => void;
+  currentUser?: string;
 }
 
 type ModalStep = 'confirm-barcode' | 'condition';
@@ -28,7 +27,7 @@ interface PendingReturn {
 
 export function ActiveLoaners({
   assignments, inventory, studioName, cityKey, cityName,
-  laundryEnabled = true, onRefresh,
+  laundryEnabled = true, onRefresh, currentUser,
 }: ActiveLoanersProps) {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'gp' | 'date' | 'item'>('date');
@@ -101,7 +100,7 @@ export function ActiveLoaners({
         updates[`inventory/${cityKey}/${inventoryKey}/status`]           = newStatus;
         updates[`inventory/${cityKey}/${inventoryKey}/returnedAt`]       = timestamp;
         updates[`inventory/${cityKey}/${inventoryKey}/returnedAtStudio`] = returnStudioKey;
-        updates[`inventory/${cityKey}/${inventoryKey}/returnedBy`]       = assignment.gpBarcode || CURRENT_USER;
+        updates[`inventory/${cityKey}/${inventoryKey}/returnedBy`]       = assignment.gpBarcode || currentUser || 'Unknown User';
         updates[`inventory/${cityKey}/${inventoryKey}/studioLocation`]   = returnStudioName;
         if (!laundryEnabled) {
           updates[`inventory/${cityKey}/${inventoryKey}/issuedAt`]       = null;
@@ -119,7 +118,7 @@ export function ActiveLoaners({
           itemBarcode: item.barcode, itemName: item.name, damageType: 'damaged',
           reportedAt: timestamp, notes: 'Returned unwearable (loaner)',
           city: cityName || '', studio: returnStudioName,
-          returnedBy: assignment.gpBarcode || CURRENT_USER,
+          returnedBy: assignment.gpBarcode || currentUser || 'Unknown User',
         };
       }
 
@@ -130,7 +129,7 @@ export function ActiveLoaners({
         if (a.itemBarcode === item.barcode && a.status === 'active') {
           updates[`assignments/${cityKey}/${aKey}/returnedAt`]       = timestamp;
           updates[`assignments/${cityKey}/${aKey}/returnedAtStudio`] = returnStudioKey;
-          updates[`assignments/${cityKey}/${aKey}/returnedBy`]       = assignment.gpBarcode || CURRENT_USER;
+          updates[`assignments/${cityKey}/${aKey}/returnedBy`]       = assignment.gpBarcode || currentUser || 'Unknown User';
           updates[`assignments/${cityKey}/${aKey}/status`]           = 'returned';
         }
       }

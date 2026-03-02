@@ -4,8 +4,6 @@ import { db } from '../firebase';
 import type { UniformItem, GamePresenter, Studio } from '../types';
 import './Operations.css';
 
-const CURRENT_USER = 'web-user';
-
 const ISSUE_REASONS = [
   { value: 'loaner', label: 'Loaner', icon: '🔄' },
   { value: 'new_hire', label: 'New Hire', icon: '🆕' },
@@ -25,11 +23,12 @@ interface OperationsProps {
   studios?: Record<string, Studio>;
   laundryEnabled?: boolean;
   onRefresh?: () => void;
+  currentUser?: string;
 }
 
 export function Operations({
   cityKey, cityName, studioKey, studioName, inventory, gps,
-  assignments = {}, studios = {}, laundryEnabled = true, onRefresh,
+  assignments = {}, studios = {}, laundryEnabled = true, onRefresh, currentUser,
 }: OperationsProps) {
   const [activeTab, setActiveTab] = useState<'issue' | 'return' | 'laundry' | 'damage'>('issue');
 
@@ -65,12 +64,12 @@ export function Operations({
       <div className="tab-content">
         {activeTab === 'issue' && (
           <IssueOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey}
-            studioName={studioName} inventory={inventory} gps={gps} studios={studios} onRefresh={onRefresh} />
+            studioName={studioName} inventory={inventory} gps={gps} studios={studios} onRefresh={onRefresh} currentUser={currentUser} />
         )}
         {activeTab === 'return' && (
           <ReturnOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey}
             studioName={studioName} inventory={inventory} gps={gps} assignments={assignments} studios={studios}
-            laundryEnabled={laundryEnabled} onRefresh={onRefresh} />
+            laundryEnabled={laundryEnabled} onRefresh={onRefresh} currentUser={currentUser} />
         )}
         {activeTab === 'laundry' && laundryEnabled && (
           <LaundryOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey}
@@ -148,13 +147,14 @@ interface OperationComponentProps {
   studios?: Record<string, Studio>;
   laundryEnabled?: boolean;
   onRefresh?: () => void;
+  currentUser?: string;
 }
 
 // ─── ISSUE OPERATION ──────────────────────────────────────────────────────────
 
 type IssueStep = 'gp' | 'items' | 'reason' | 'loaner_reason' | 'confirm';
 
-function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, gps, studios = {}, onRefresh }: OperationComponentProps) {
+function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, gps, studios = {}, onRefresh, currentUser }: OperationComponentProps) {
   const [step, setStep] = useState<IssueStep>('gp');
   const [gpSearch, setGpSearch] = useState('');
   const [selectedGP, setSelectedGP] = useState<{ name: string; barcode: string; key?: string } | null>(null);
@@ -268,7 +268,7 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
         updates[`inventory/${cityKey}/${itemKey}/issuedAt`] = timestamp;
         updates[`inventory/${cityKey}/${itemKey}/issuedAtStudio`] = targetStudioKey;
         updates[`inventory/${cityKey}/${itemKey}/issuedAtCity`] = cityKey;
-        updates[`inventory/${cityKey}/${itemKey}/issuedBy`] = CURRENT_USER;
+        updates[`inventory/${cityKey}/${itemKey}/issuedBy`] = currentUser || 'Unknown User';
         updates[`inventory/${cityKey}/${itemKey}/issueReason`] = issueReason;
 
         const assignmentKey = push(ref(db, `assignments/${cityKey}`)).key;
@@ -276,7 +276,7 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
           itemBarcode: item.barcode, itemName: item.name, itemSize: item.size,
           gpName: selectedGP.name, gpBarcode: selectedGP.barcode,
           issuedAt: timestamp, issuedAtStudio: targetStudioKey, issuedAtCity: cityKey,
-          issuedBy: CURRENT_USER, issueReason, status: 'active',
+          issuedBy: currentUser || 'Unknown User', issueReason, status: 'active',
           city: cityName, studio: targetStudioName,
           ...(issueReason === 'loaner' && loanerReason ? { loanerReason } : {}),
         };
@@ -296,7 +296,7 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
         ? ` (${loanerReason === 'forgot' ? 'Forgot uniform' : 'Pit was changed'})`
         : '';
       updates[`logs/${cityKey}/${targetStudioKey}/${logKey}`] = {
-        date: timestamp, action: 'ISSUE',
+        date: timestamp, action: 'ISSUE', user: currentUser || 'Unknown User',
         details: `Issued ${selectedItems.length} item(s) to ${selectedGP.name} — Reason: ${reasonLabel}${loanerLabel} — Items: ${selectedItems.map(s => s.item.name).join(', ')}`,
       };
 
@@ -570,7 +570,7 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
 
 type ReturnStep = 'gp' | 'items' | 'status';
 
-function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, gps, assignments = {}, studios = {}, laundryEnabled = true, onRefresh }: OperationComponentProps) {
+function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, gps, assignments = {}, studios = {}, laundryEnabled = true, onRefresh, currentUser }: OperationComponentProps) {
   const [step, setStep] = useState<ReturnStep>('gp');
   const [gpSearch, setGpSearch] = useState('');
   const [resolvedGP, setResolvedGP] = useState<{ name: string; barcode: string } | null>(null);
@@ -700,7 +700,7 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
           updates[`inventory/${cityKey}/${itemKey}/status`] = newStatus;
           updates[`inventory/${cityKey}/${itemKey}/returnedAt`] = timestamp;
           updates[`inventory/${cityKey}/${itemKey}/returnedAtStudio`] = targetStudioKey;
-          updates[`inventory/${cityKey}/${itemKey}/returnedBy`] = resolvedGP?.barcode || CURRENT_USER;
+          updates[`inventory/${cityKey}/${itemKey}/returnedBy`] = resolvedGP?.barcode || currentUser || 'Unknown User';
           updates[`inventory/${cityKey}/${itemKey}/studioLocation`] = targetStudioName;
           if (laundryEnabled) {
             hamperIncrement++;
@@ -715,7 +715,7 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
           updates[`damages/${cityKey}/${damageKey}`] = {
             itemBarcode: item.barcode, itemName: item.name, damageType: 'damaged',
             reportedAt: timestamp, notes: 'Returned as unwearable',
-            city: cityName, studio: targetStudioName, returnedBy: resolvedGP?.barcode || CURRENT_USER,
+            city: cityName, studio: targetStudioName, returnedBy: resolvedGP?.barcode || currentUser || 'Unknown User',
           };
         }
 
@@ -726,7 +726,7 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
           if (a.itemBarcode === item.barcode && a.status === 'active') {
             updates[`assignments/${cityKey}/${aKey}/returnedAt`] = timestamp;
             updates[`assignments/${cityKey}/${aKey}/returnedAtStudio`] = targetStudioKey;
-            updates[`assignments/${cityKey}/${aKey}/returnedBy`] = resolvedGP?.barcode || CURRENT_USER;
+            updates[`assignments/${cityKey}/${aKey}/returnedBy`] = resolvedGP?.barcode || currentUser || 'Unknown User';
             updates[`assignments/${cityKey}/${aKey}/status`] = 'returned';
           }
         }
@@ -741,7 +741,7 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
       const cleanerItems = returnItems.filter(r => r.disposition === 'cleaner').map(r => r.item.barcode).join(', ');
       const damagedItems = returnItems.filter(r => r.disposition === 'unwearable').map(r => r.item.barcode).join(', ');
       updates[`logs/${cityKey}/${targetStudioKey}/${logKey}`] = {
-        date: timestamp, action: 'RETURN',
+        date: timestamp, action: 'RETURN', user: currentUser || 'Unknown User',
         details: `Return by ${resolvedGP?.name || resolvedGP?.barcode || 'staff'} at ${targetStudioName}${cleanerItems ? ' | To cleaner: ' + cleanerItems : ''}${damagedItems ? ' | Damaged out: ' + damagedItems : ''}`,
       };
 
