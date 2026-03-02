@@ -195,10 +195,15 @@ function UserApprovals({
     const roleColor = userRoleMeta[user.role]?.color || '#6b7280';
 
     return (
-      <div className={`user-card ${isPending ? 'pending' : ''}`}>
+      <div className={`user-card ${isPending ? 'pending' : ''} ${isEditing ? 'editing' : ''}`}>
+        {isEditing && (
+          <div className="editing-banner">
+            ✏️ Editing: <strong>{user.displayName || user.email}</strong>
+          </div>
+        )}
         <div className="user-card-header">
-          <div>
-            <strong>{user.displayName || '—'}</strong>
+          <div className="user-card-identity">
+            <strong className="user-display-name">{user.displayName || '—'}</strong>
             <span className="user-email-small">{user.email}</span>
             {user.requestedCity && cities[user.requestedCity] && (
               <span className="requested-city-tag">
@@ -206,7 +211,7 @@ function UserApprovals({
               </span>
             )}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.3rem' }}>
+          <div className="user-card-chips">
             <span className={`status-chip status-${user.status}`}>{user.status}</span>
             {user.role && (
               <span className="role-chip" style={{ color: roleColor, borderColor: `${roleColor}55`, background: `${roleColor}15` }}>
@@ -280,26 +285,33 @@ function UserApprovals({
             </div>
           </div>
         ) : (
-          <div className="user-card-meta">
-            <span className="meta-item">
-              Cities: <strong>
-                {user.role === 'Admin' || user.role === 'Super User'
-                  ? 'All cities'
-                  : user.assignedCities?.length
-                    ? user.assignedCities.map(k => cities[k]?.name || k).join(', ')
-                    : 'None assigned'}
-              </strong>
-            </span>
-            <span className="meta-item">
-              Requested: {user.requestedAt ? new Date(user.requestedAt).toLocaleDateString() : '—'}
-            </span>
-            {user.approvedAt && (
-              <span className="meta-item">
-                Approved: {new Date(user.approvedAt).toLocaleDateString()}
-              </span>
-            )}
-            <button className="btn btn-dark btn-sm" onClick={() => initEdit(uid, user)}>Edit</button>
-          </div>
+          <>
+            <div className="user-card-meta">
+              <div className="meta-row">
+                <span className="meta-label">Cities</span>
+                <span className="meta-value">
+                  {user.role === 'Admin' || user.role === 'Super User'
+                    ? 'All cities'
+                    : user.assignedCities?.length
+                      ? user.assignedCities.map(k => cities[k]?.name || k).join(', ')
+                      : 'None assigned'}
+                </span>
+              </div>
+              <div className="meta-row">
+                <span className="meta-label">Requested</span>
+                <span className="meta-value">{user.requestedAt ? new Date(user.requestedAt).toLocaleDateString() : '—'}</span>
+              </div>
+              {user.approvedAt && (
+                <div className="meta-row">
+                  <span className="meta-label">Approved</span>
+                  <span className="meta-value">{new Date(user.approvedAt).toLocaleDateString()}</span>
+                </div>
+              )}
+            </div>
+            <div className="user-card-actions">
+              <button className="btn btn-dark btn-sm" onClick={() => initEdit(uid, user)}>✏️ Edit</button>
+            </div>
+          </>
         )}
       </div>
     );
