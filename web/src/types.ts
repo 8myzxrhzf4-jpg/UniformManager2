@@ -66,6 +66,8 @@ export interface GamePresenter {
   barcode?: string;
   city?: string;
   studio?: string;
+  terminated?: boolean;
+  terminatedAt?: string;
 }
 
 export interface User {

@@ -104,6 +104,17 @@ function PreviewTable({ headers, rows, errors }: { headers: string[]; rows: Reco
   );
 }
 
+// ─── GP HELPERS ──────────────────────────────────────────────────────────────
+
+/** Extract flat { gpKey: GamePresenter } for a city from the (possibly nested) gamePresenters map. */
+function flatCityGPs(gamePresenters: Record<string, GamePresenter>, cityKey: string): Record<string, GamePresenter> {
+  const citySlice = (gamePresenters as any)[cityKey];
+  if (citySlice && typeof citySlice === 'object' && Object.values(citySlice).some((v: any) => v?.name)) {
+    return citySlice as Record<string, GamePresenter>;
+  }
+  return gamePresenters;
+}
+
 // ─── IMPORT PANEL ─────────────────────────────────────────────────────────────
 
 function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, gamePresenters, currentUser }: {
@@ -190,7 +201,14 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
           };
         }
       } else {
-        const existingIds = new Set(Object.values(gamePresenters).map(gp => gp.barcode).filter(Boolean));
+        // Get city-scoped GP flat map (gamePresenters may be nested by cityKey)
+        const cityGPsFlat = flatCityGPs(gamePresenters, cityKey);
+
+        // Map existing ID cards → { gpKey, gp } for duplicate / re-activation checks
+        const existingByBarcode = new Map<string, { key: string; gp: GamePresenter }>();
+        Object.entries(cityGPsFlat).forEach(([k, v]) => {
+          if (v?.barcode) existingByBarcode.set(v.barcode, { key: k, gp: v });
+        });
         const batchIds = new Set<string>();
 
         for (let i = 0; i < parsedRows.length; i++) {
@@ -199,7 +217,20 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
           const idCard = row['id card'] || row['barcode'] || '';
 
           if (!name || !idCard) { skipped.push(`Row ${i + 2}: missing name or ID card`); continue; }
-          if (existingIds.has(idCard) || batchIds.has(idCard)) { skipped.push(`Row ${i + 2}: duplicate ID card "${idCard}"`); continue; }
+          if (batchIds.has(idCard)) { skipped.push(`Row ${i + 2}: duplicate ID card "${idCard}"`); continue; }
+
+          if (existingByBarcode.has(idCard)) {
+            const existing = existingByBarcode.get(idCard)!;
+            if (existing.gp.terminated) {
+              // Re-activate a previously terminated GP
+              updates[`gamePresenters/${cityKey}/${existing.key}/terminated`] = false;
+              updates[`gamePresenters/${cityKey}/${existing.key}/terminatedAt`] = null;
+              added++;
+            } else {
+              skipped.push(`Row ${i + 2}: duplicate ID card "${idCard}"`);
+            }
+            continue;
+          }
 
           batchIds.add(idCard);
           const gpKey = push(ref(db, `gamePresenters/${cityKey}`)).key!;
@@ -311,13 +342,14 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
 
 // ─── EXPORT PANEL ─────────────────────────────────────────────────────────────
 
-function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, laundryOrders }: {
+function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, laundryOrders, gamePresenters }: {
   cityKey: string;
   cityName: string;
   studioName: string;
   inventory: Record<string, UniformItem>;
   assignments: Record<string, Assignment>;
   laundryOrders: Record<string, LaundryOrder>;
+  gamePresenters: Record<string, GamePresenter>;
 }) {
   const today = toDateInput(new Date());
   const [dateFrom, setDateFrom] = useState('');
@@ -497,7 +529,7 @@ function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, la
       const cityData = snap.val() || {};
       const rows: string[][] = [
         ['Completed At', 'Week', 'Studio', 'Audited By', 'Category', 'Size', 'Expected', 'Found', 'Missing', 'Unexpected', 'Variance %', 'Risk Score', 'Reasons',
-          'Found / Accounted For', 'Uniform Holding (Missing)', 'Laundry', 'Damaged / Lost'],
+          'Found / Accounted For', 'Uniform Holding (Missing)', 'Laundry', 'Damaged / Lost', 'Terminated GP Holding'],
       ];
       for (const [sk, studioSessions] of Object.entries(cityData)) {
         if (typeof studioSessions !== 'object' || !studioSessions) continue;
@@ -520,6 +552,7 @@ function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, la
             String(shrinkMap['Uniform Holding (Missing)'] ?? ''),
             String(shrinkMap['Laundry'] ?? ''),
             String(shrinkMap['Damaged / Lost'] ?? ''),
+            String(shrinkMap['Terminated GP Holding'] ?? ''),
           ];
           if (Array.isArray(session.results) && session.results.length > 0) {
             for (const r of session.results) {
@@ -548,6 +581,45 @@ function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, la
     } finally {
       setAuditLoading(false);
     }
+  };
+
+  const exportGPs = () => {
+    const cityGPsFlat = flatCityGPs(gamePresenters, cityKey);
+    downloadCSV(`game_presenters_${dateSuffix}.csv`, [
+      ['Name', 'ID Card', 'City', 'Studio', 'Status'],
+      ...Object.values(cityGPsFlat).map(gp => [
+        gp.name, gp.barcode || '', gp.city || '', gp.studio || '',
+        gp.terminated ? 'Terminated' : 'Active',
+      ]),
+    ]);
+  };
+
+  const exportTerminatedOutstanding = () => {
+    const cityGPsFlat = flatCityGPs(gamePresenters, cityKey);
+    const terminatedBarcodes = new Set<string>();
+    const terminatedNames = new Set<string>();
+    Object.values(cityGPsFlat).forEach(gp => {
+      if (gp.terminated) {
+        if (gp.barcode) terminatedBarcodes.add(gp.barcode);
+        terminatedNames.add((gp.name || '').toLowerCase());
+      }
+    });
+    const outstanding = Object.values(assignments).filter(a =>
+      a.status === 'active' && (
+        (a.gpBarcode && terminatedBarcodes.has(a.gpBarcode)) ||
+        terminatedNames.has((a.gpName || '').toLowerCase())
+      )
+    );
+    const now = Date.now();
+    downloadCSV(`terminated_gp_outstanding_${dateSuffix}.csv`, [
+      ['GP Name', 'GP ID Card', 'Item Name', 'Size', 'Item Barcode', 'Issued At', 'Issued At Studio', 'Days Outstanding'],
+      ...outstanding.map(a => {
+        const issuedMs = a.issuedAt ? new Date(a.issuedAt).getTime() : 0;
+        const daysOut = issuedMs ? String(Math.floor((now - issuedMs) / 86400000)) : '';
+        return [a.gpName, a.gpBarcode || '', a.itemName, a.itemSize, a.itemBarcode,
+          a.issuedAt, a.issuedAtStudio, daysOut];
+      }),
+    ]);
   };
 
   const exportCards = [
@@ -611,6 +683,14 @@ function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, la
           </select>
         </div>
       ),
+    },
+    {
+      icon: '🪪', title: 'Game Presenters', desc: 'Full GP list with ID cards and active/terminated status',
+      action: exportGPs, extra: null,
+    },
+    {
+      icon: '⚠️', title: 'Terminated GP Outstanding', desc: 'Uniforms still held by terminated GPs',
+      action: exportTerminatedOutstanding, extra: null,
     },
   ];
 
@@ -717,6 +797,7 @@ export function ImportExport({ cityKey, cityName, studioKey, studioName, invento
             inventory={inventory}
             assignments={assignments}
             laundryOrders={laundryOrders}
+            gamePresenters={gamePresenters}
           />
         )}
       </div>

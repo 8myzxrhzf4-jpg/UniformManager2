@@ -326,7 +326,8 @@ export function Dashboard({ user }: DashboardProps) {
                   {activeView === 'analytics' && (
                     <Analytics cityKey={selectedCity} cityName={cities[selectedCity].name}
                       studioKey={selectedStudio || ''} studioName={selectedStudioInfo?.name || ''}
-                      inventory={inventory} assignments={assignments} currentUser={displayName} />
+                      inventory={inventory} assignments={assignments} currentUser={displayName}
+                      gamePresenters={gps} />
                   )}
 
                   {activeView === 'size-guide' && (
