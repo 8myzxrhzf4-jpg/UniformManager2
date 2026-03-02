@@ -429,20 +429,33 @@
   cursor: pointer;
   padding: 0.2rem 0.55rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-divider);
   background: var(--color-bg-card);
   transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+
+.city-check:hover {
+  border-color: var(--color-accent);
+}
+
+.city-check:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .city-check:has(input:checked) {
   border-color: var(--color-accent);
   color: var(--color-accent);
-  background: rgba(212, 175, 55, 0.08);
+  background: rgba(212, 175, 55, 0.15);
 }
 
 .city-check input {
   margin: 0;
   accent-color: var(--color-accent);
+}
+
+.user-edit-form .field-hint {
+  color: var(--color-text-secondary);
 }
 
 /* ─── CITY STUDIO MANAGER ──────────────────────────────────────────────────── */
