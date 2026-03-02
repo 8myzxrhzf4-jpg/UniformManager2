@@ -95,13 +95,15 @@ export function GPLookup({ gps, allAssignments, cities, cityKey, onBack }: GPLoo
   const exportCSV = () => {
     if (!selectedGP) return;
     const rows = [
-      ['GP Name', 'GP ID', 'Item', 'Size', 'Barcode', 'Studio', 'City', 'Issued', 'Returned', 'Status'],
+      ['GP Name', 'GP ID', 'Item', 'Size', 'Barcode', 'Studio', 'City', 'Issued', 'Issued By', 'Returned', 'Returned By', 'Status'],
       ...selectedGP.history.map(a => [
         a.gpName, a.gpBarcode || '',
         a.itemName, a.itemSize, a.itemBarcode,
         a.studio || '', a.city || '',
         a.issuedAt ? new Date(a.issuedAt).toLocaleDateString() : '',
+        a.issuedBy || '',
         a.returnedAt ? new Date(a.returnedAt).toLocaleDateString() : '',
+        a.returnedBy || '',
         a.status,
       ]),
     ];

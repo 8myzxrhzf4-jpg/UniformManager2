@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { ref, update, push, get } from 'firebase/database';
 import { db } from '../firebase';
 import { BarChart3, PieChart, Clock, Zap } from 'lucide-react';
-import type { Assignment, UniformItem, GPIssueSummary, ItemDemandSummary, ItemLifespanSummary } from '../types';
+import type { Assignment, UniformItem, GPIssueSummary, ItemDemandSummary, ItemLifespanSummary, GamePresenter } from '../types';
 import './Analytics.css';
 
 interface AnalyticsProps {
@@ -13,9 +13,10 @@ interface AnalyticsProps {
   inventory: Record<string, UniformItem>;
   assignments: Record<string, Assignment>;
   currentUser?: string;
+  gamePresenters?: Record<string, GamePresenter>;
 }
 
-export function Analytics({ cityKey, cityName, studioKey, studioName, inventory, assignments, currentUser }: AnalyticsProps) {
+export function Analytics({ cityKey, cityName, studioKey, studioName, inventory, assignments, currentUser, gamePresenters }: AnalyticsProps) {
   const [activeTab, setActiveTab] = useState<'gp-report' | 'demand' | 'lifespan' | 'audit'>('gp-report');
 
   return (
@@ -83,6 +84,7 @@ export function Analytics({ cityKey, cityName, studioKey, studioName, inventory,
             inventory={inventory}
             assignments={assignments}
             currentUser={currentUser}
+            gamePresenters={gamePresenters}
           />
         )}
       </div>
@@ -97,6 +99,7 @@ interface AnalyticsComponentProps {
   assignments: Record<string, Assignment>;
   inventory?: Record<string, UniformItem>;
   cityName?: string;
+  gamePresenters?: Record<string, GamePresenter>;
 }
 
 // GP Issue Report Component
@@ -668,7 +671,7 @@ function getWeekString(): string {
   return `Week of ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
-function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, assignments, currentUser }: AnalyticsComponentProps & { inventory: Record<string, UniformItem>; cityName: string; currentUser?: string }) {
+function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, assignments, currentUser, gamePresenters }: AnalyticsComponentProps & { inventory: Record<string, UniformItem>; cityName: string; currentUser?: string }) {
   const [stage, setStage] = useState<'generate' | 'scanning' | 'results'>('generate');
   const [scopes, setScopes] = useState<AuditScope[]>([]);
   const [scopeIndex, setScopeIndex] = useState(0);
@@ -734,13 +737,51 @@ function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, ass
       }
     });
 
-    return [
+    // Terminated GP Holding: studio items "Issued" to a terminated GP
+    let terminatedHoldingCount = 0;
+    if (gamePresenters) {
+      const cityGPsFlat: Record<string, any> = (() => {
+        const slice = (gamePresenters as any)[cityKey];
+        return slice && typeof slice === 'object' && Object.values(slice).some((v: any) => v?.name)
+          ? slice : gamePresenters;
+      })();
+      const terminatedBarcodes = new Set<string>();
+      const terminatedNames = new Set<string>();
+      Object.values(cityGPsFlat).forEach((gp: any) => {
+        if (gp?.terminated) {
+          if (gp.barcode) terminatedBarcodes.add(gp.barcode);
+          if (gp.name) terminatedNames.add((gp.name as string).toLowerCase());
+        }
+      });
+      studioItems.forEach(item => {
+        if (!allMissingBarcodes.has(item.barcode) && !allFoundBarcodes.has(item.barcode)) {
+          const st = (item.status || '').toLowerCase();
+          if (st === 'issued') {
+            const active = Object.values(assignments).find(
+              a => a.itemBarcode === item.barcode && a.status === 'active'
+            );
+            if (active) {
+              const isTerminated =
+                (active.gpBarcode && terminatedBarcodes.has(active.gpBarcode)) ||
+                terminatedNames.has((active.gpName || '').toLowerCase());
+              if (isTerminated) terminatedHoldingCount++;
+            }
+          }
+        }
+      });
+    }
+
+    const slices: ShrinkageSlice[] = [
       { label: 'Found / Accounted For',    count: foundCount,   color: 'var(--color-success)' },
       { label: 'Uniform Holding (Missing)', count: holdingCount, color: 'var(--color-warning)' },
       { label: 'Laundry',                   count: laundryCount, color: '#4a9eff' },
       { label: 'Damaged / Lost',            count: damagedCount, color: 'var(--color-error)' },
     ];
-  }, [stage, completedResults, inventory, studioName, studioKey]);
+    if (terminatedHoldingCount > 0) {
+      slices.push({ label: 'Terminated GP Holding', count: terminatedHoldingCount, color: '#9333ea' });
+    }
+    return slices;
+  }, [stage, completedResults, inventory, assignments, gamePresenters, studioName, studioKey, cityKey]);
 
   const loadPastSessions = async (force = false) => {
     if (sessionsLoaded && !force) return;
