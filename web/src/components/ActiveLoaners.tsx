@@ -100,7 +100,7 @@ export function ActiveLoaners({
         updates[`inventory/${cityKey}/${inventoryKey}/status`]           = newStatus;
         updates[`inventory/${cityKey}/${inventoryKey}/returnedAt`]       = timestamp;
         updates[`inventory/${cityKey}/${inventoryKey}/returnedAtStudio`] = returnStudioKey;
-        updates[`inventory/${cityKey}/${inventoryKey}/returnedBy`]       = assignment.gpBarcode || currentUser || 'Unknown User';
+        updates[`inventory/${cityKey}/${inventoryKey}/returnedBy`]       = currentUser || 'Unknown User';
         updates[`inventory/${cityKey}/${inventoryKey}/studioLocation`]   = returnStudioName;
         if (!laundryEnabled) {
           updates[`inventory/${cityKey}/${inventoryKey}/issuedAt`]       = null;
@@ -118,7 +118,7 @@ export function ActiveLoaners({
           itemBarcode: item.barcode, itemName: item.name, damageType: 'damaged',
           reportedAt: timestamp, notes: 'Returned unwearable (loaner)',
           city: cityName || '', studio: returnStudioName,
-          returnedBy: assignment.gpBarcode || currentUser || 'Unknown User',
+          returnedBy: currentUser || 'Unknown User',
         };
       }
 
@@ -129,7 +129,7 @@ export function ActiveLoaners({
         if (a.itemBarcode === item.barcode && a.status === 'active') {
           updates[`assignments/${cityKey}/${aKey}/returnedAt`]       = timestamp;
           updates[`assignments/${cityKey}/${aKey}/returnedAtStudio`] = returnStudioKey;
-          updates[`assignments/${cityKey}/${aKey}/returnedBy`]       = assignment.gpBarcode || currentUser || 'Unknown User';
+          updates[`assignments/${cityKey}/${aKey}/returnedBy`]       = currentUser || 'Unknown User';
           updates[`assignments/${cityKey}/${aKey}/status`]           = 'returned';
         }
       }
