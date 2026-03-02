@@ -183,13 +183,16 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
           const status = normalizeStatus(row['status'] || '');
           const category = row['category'] || 'Other';
           const studio = row['studio'] || row['studiolocation'] || studioName;
+          const batchDate = row['batch date'] || row['batchdate'] || row['batch_date'] || '';
 
           if (!name || !size || !barcode) { skipped.push(`Row ${i + 2}: missing name/size/barcode`); continue; }
           if (existingBarcodes.has(barcode) || batchBarcodes.has(barcode)) { skipped.push(`Row ${i + 2}: duplicate barcode "${barcode}"`); continue; }
 
           batchBarcodes.add(barcode);
           const newKey = push(ref(db, `inventory/${cityKey}`)).key!;
-          updates[`inventory/${cityKey}/${newKey}`] = { name, size, barcode, status, category, studioLocation: studio };
+          const itemData: Record<string, any> = { name, size, barcode, status, category, studioLocation: studio };
+          if (batchDate) itemData.batchDate = batchDate;
+          updates[`inventory/${cityKey}/${newKey}`] = itemData;
           added++;
         }
 
@@ -391,10 +394,10 @@ function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, la
     let items = Object.values(inventory);
     if (statusFilter !== 'all') items = items.filter(i => i.status === statusFilter);
     downloadCSV(`inventory_${dateSuffix}.csv`, [
-      ['Name', 'Size', 'Barcode', 'Status', 'Category', 'Studio Location', 'Issued At', 'Issued At Studio', 'Issued By', 'Returned At', 'Returned At Studio'],
+      ['Name', 'Size', 'Barcode', 'Status', 'Category', 'Studio Location', 'Batch Date', 'Issued At', 'Issued At Studio', 'Issued By', 'Returned At', 'Returned At Studio'],
       ...items.map(i => [
         i.name, i.size, i.barcode, i.status, i.category, i.studioLocation,
-        i.issuedAt || '', i.issuedAtStudio || '', i.issuedBy || '',
+        i.batchDate || '', i.issuedAt || '', i.issuedAtStudio || '', i.issuedBy || '',
         i.returnedAt || '', i.returnedAtStudio || '',
       ]),
     ]);

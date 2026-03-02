@@ -362,6 +362,16 @@ body {
   color: var(--color-accent);
 }
 
+.field-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: 0.2rem;
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .text-muted {
   color: var(--color-text-muted);
 }

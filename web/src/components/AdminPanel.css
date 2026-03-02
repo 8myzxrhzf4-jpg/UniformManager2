@@ -425,7 +425,7 @@
   align-items: center;
   gap: 0.3rem;
   font-size: 0.82rem;
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   cursor: pointer;
   padding: 0.2rem 0.55rem;
   border-radius: var(--radius-sm);

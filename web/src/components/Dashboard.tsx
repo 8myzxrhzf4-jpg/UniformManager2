@@ -112,6 +112,28 @@ export function Dashboard({ user }: DashboardProps) {
     return allItems.filter(item => (item.studioLocation ?? '').trim().toLowerCase() === sn.trim().toLowerCase());
   }, [inventory, selectedCity, selectedStudio, cities]);
 
+  // Build map: itemBarcode → gpName for active assignments (for "Issued To" display)
+  const issuedToMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    Object.values(assignments).forEach(a => {
+      if (a.status === 'active' && a.itemBarcode) map[a.itemBarcode] = a.gpName;
+    });
+    return map;
+  }, [assignments]);
+
+  // Inventory filter state
+  const [invNameFilter, setInvNameFilter] = useState('');
+  const [invSizeFilter, setInvSizeFilter] = useState('');
+  const [invStatusFilter, setInvStatusFilter] = useState('');
+
+  const filteredInventoryItems = useMemo(() => {
+    let items = inventoryItems;
+    if (invNameFilter) items = items.filter(i => (i.name ?? '').toLowerCase().includes(invNameFilter.toLowerCase()));
+    if (invSizeFilter) items = items.filter(i => (i.size ?? '').toLowerCase().includes(invSizeFilter.toLowerCase()));
+    if (invStatusFilter) items = items.filter(i => (i.status ?? '') === invStatusFilter);
+    return items;
+  }, [inventoryItems, invNameFilter, invSizeFilter, invStatusFilter]);
+
   const logEntries = useMemo(() =>
     Object.entries(logs || {}).map(([key, log]) => ({ key, ...log }))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
@@ -267,17 +289,55 @@ export function Dashboard({ user }: DashboardProps) {
                           <p className="empty-message">No inventory items found{selectedStudioName() ? ` for studio "${selectedStudioName()}"` : ''}.</p>
                         ) : (
                           <div className="table-container">
+                            <div className="inv-filters">
+                              <input
+                                type="text"
+                                className="input-dark inv-filter-input"
+                                placeholder="Filter by name…"
+                                value={invNameFilter}
+                                onChange={e => setInvNameFilter(e.target.value)}
+                              />
+                              <input
+                                type="text"
+                                className="input-dark inv-filter-input"
+                                placeholder="Filter by size…"
+                                value={invSizeFilter}
+                                onChange={e => setInvSizeFilter(e.target.value)}
+                              />
+                              <select
+                                className="input-dark inv-filter-input"
+                                value={invStatusFilter}
+                                onChange={e => setInvStatusFilter(e.target.value)}
+                              >
+                                <option value="">All statuses</option>
+                                <option value="Available">Available</option>
+                                <option value="In Stock">In Stock</option>
+                                <option value="Issued">Issued</option>
+                                <option value="In Hamper">In Hamper</option>
+                                <option value="At Laundry">At Laundry</option>
+                                <option value="Damaged">Damaged</option>
+                                <option value="Lost">Lost</option>
+                              </select>
+                            </div>
                             <table className="data-table">
                               <thead><tr><th>Name</th><th>Size</th><th>Barcode</th><th>Status</th><th>Studio</th></tr></thead>
                               <tbody>
-                                {inventoryItems.map(item => (
+                                {filteredInventoryItems.map(item => (
                                   <tr key={item.key}>
                                     <td>{item.name}</td><td>{item.size}</td>
                                     <td><code className="barcode">{item.barcode}</code></td>
-                                    <td><span className={`status-badge status-${(item.status ?? '').toLowerCase().replace(/\s+/g, '-')}`}>{item.status}</span></td>
+                                    <td>
+                                      <span className={`status-badge status-${(item.status ?? '').toLowerCase().replace(/\s+/g, '-')}`}>{item.status}</span>
+                                      {item.status === 'Issued' && issuedToMap[item.barcode] && (
+                                        <div className="issued-to-label">→ {issuedToMap[item.barcode]}</div>
+                                      )}
+                                    </td>
                                     <td>{item.studioLocation}</td>
                                   </tr>
                                 ))}
+                                {filteredInventoryItems.length === 0 && (
+                                  <tr><td colSpan={5} className="empty-filter-row">No items match the current filters.</td></tr>
+                                )}
                               </tbody>
                             </table>
                           </div>
