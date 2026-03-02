@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { ref, update, push, get } from 'firebase/database';
 import { db } from '../firebase';
-import type { Assignment, UniformItem, GPIssueSummary, ItemDemandSummary, ItemLifespanSummary, WeeklyAuditList, WeeklyAuditItem, AuditHistoryEntry } from '../types';
+import { BarChart3, PieChart, Clock, Zap } from 'lucide-react';
+import type { Assignment, UniformItem, GPIssueSummary, ItemDemandSummary, ItemLifespanSummary } from '../types';
 import './Analytics.css';
 
 interface AnalyticsProps {
@@ -14,44 +15,36 @@ interface AnalyticsProps {
 }
 
 export function Analytics({ cityKey, cityName, studioKey, studioName, inventory, assignments }: AnalyticsProps) {
-  const [activeTab, setActiveTab] = useState<'gp-report' | 'demand' | 'lifespan' | 'audit' | 'smart-audit'>('gp-report');
+  const [activeTab, setActiveTab] = useState<'gp-report' | 'demand' | 'lifespan' | 'audit'>('gp-report');
 
   return (
     <div className="analytics-container card">
       <h2 className="text-accent">Analytics &amp; Reports</h2>
       <p className="text-muted">Studio-scoped analytics for {studioName}</p>
       
-      <div className="tabs">
-        <button
-          className={`tab ${activeTab === 'gp-report' ? 'active' : ''}`}
-          onClick={() => setActiveTab('gp-report')}
-        >
-          GP Issues
-        </button>
-        <button
-          className={`tab ${activeTab === 'demand' ? 'active' : ''}`}
-          onClick={() => setActiveTab('demand')}
-        >
-          Demand by Size
-        </button>
-        <button
-          className={`tab ${activeTab === 'lifespan' ? 'active' : ''}`}
-          onClick={() => setActiveTab('lifespan')}
-        >
-          Item Lifespan
-        </button>
-        <button
-          className={`tab ${activeTab === 'audit' ? 'active' : ''}`}
-          onClick={() => setActiveTab('audit')}
-        >
-          Audit List
-        </button>
-        <button
-          className={`tab ${activeTab === 'smart-audit' ? 'active' : ''}`}
-          onClick={() => setActiveTab('smart-audit')}
-        >
-          Smart Audit
-        </button>
+      <div className="tabs modern-tabs">
+        {[
+          { id: 'gp-report', label: 'GP Issues', icon: BarChart3 },
+          { id: 'demand', label: 'Demand by Size', icon: PieChart },
+          { id: 'lifespan', label: 'Item Lifespan', icon: Clock },
+          { id: 'audit', label: 'Smart Audit', icon: Zap },
+        ].map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              className={`tab modern-tab ${isActive ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id as any)}
+              type="button"
+              aria-pressed={isActive}
+              title={tab.label}
+            >
+              <Icon size={16} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="tab-content">
@@ -81,17 +74,7 @@ export function Analytics({ cityKey, cityName, studioKey, studioName, inventory,
           />
         )}
         {activeTab === 'audit' && (
-          <AuditListGenerator
-            cityKey={cityKey}
-            cityName={cityName}
-            studioKey={studioKey}
-            studioName={studioName}
-            inventory={inventory}
-            assignments={assignments}
-          />
-        )}
-        {activeTab === 'smart-audit' && (
-          <SmartAuditScanner
+          <UnifiedAudit
             cityKey={cityKey}
             cityName={cityName}
             studioKey={studioKey}
@@ -471,7 +454,7 @@ function LifespanAnalysis({ inventory, assignments }: AnalyticsComponentProps & 
       (item) => item.status === 'Damaged' || item.status === 'Lost'
     );
 
-    // Group by category
+    // Group by item name (e.g. "Dress Shirt" — same as SmartAudit / SizeSuggestion)
     const categoryMap = new Map<string, number[]>();
 
     damagedItems.forEach((item) => {
@@ -485,10 +468,11 @@ function LifespanAnalysis({ inventory, assignments }: AnalyticsComponentProps & 
         const now = new Date();
         const lifespanDays = Math.floor((now.getTime() - firstIssue.getTime()) / (1000 * 60 * 60 * 24));
 
-        if (!categoryMap.has(item.category)) {
-          categoryMap.set(item.category, []);
+        const key = getItemCategory(item); // uses item.name
+        if (!categoryMap.has(key)) {
+          categoryMap.set(key, []);
         }
-        categoryMap.get(item.category)!.push(lifespanDays);
+        categoryMap.get(key)!.push(lifespanDays);
       }
     });
 
@@ -522,7 +506,7 @@ function LifespanAnalysis({ inventory, assignments }: AnalyticsComponentProps & 
   }, [inventory, assignments]);
 
   const exportCSV = () => {
-    let csv = 'Category,Avg Lifespan (Days),Median Lifespan (Days),Min,Max,Sample Size\n';
+    let csv = 'Item Name,Avg Lifespan (Days),Median Lifespan (Days),Min,Max,Sample Size\n';
     lifespanSummaries.forEach((summary) => {
       csv += `${summary.category},${summary.avgLifespanDays},${summary.medianLifespanDays || 0},${summary.minLifespanDays || 0},${summary.maxLifespanDays || 0},${summary.sampleSize}\n`;
     });
@@ -540,8 +524,8 @@ function LifespanAnalysis({ inventory, assignments }: AnalyticsComponentProps & 
 
   return (
     <div className="analytics-section">
-      <h3>Average Item Lifespan by Category</h3>
-      <p className="text-muted">Time from first issue to damaged/lost status</p>
+      <h3>Average Item Lifespan by Item Name</h3>
+      <p className="text-muted">Time from first issue to damaged/lost status, grouped by item name</p>
 
       <div className="analytics-controls">
         <button onClick={exportCSV} className="btn btn-gold" disabled={lifespanSummaries.length === 0}>
@@ -556,7 +540,7 @@ function LifespanAnalysis({ inventory, assignments }: AnalyticsComponentProps & 
           <table className="table-dark">
             <thead>
               <tr>
-                <th>Category</th>
+                <th>Item Name</th>
                 <th>Avg Lifespan (Days)</th>
                 <th>Median Lifespan (Days)</th>
                 <th>Min</th>
@@ -590,708 +574,458 @@ function LifespanAnalysis({ inventory, assignments }: AnalyticsComponentProps & 
   );
 }
 
-// Audit List Generator Component
-function AuditListGenerator({ cityKey, cityName, studioKey, studioName, inventory, assignments }: AnalyticsComponentProps & { inventory: Record<string, UniformItem>; cityName: string }) {
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
-  const [auditLists, setAuditLists] = useState<Record<string, WeeklyAuditList>>({});
-  const [auditHistory, setAuditHistory] = useState<Record<string, AuditHistoryEntry>>({});
 
-  // Load existing audit lists and history
-  useMemo(() => {
-    const loadData = async () => {
-      try {
-        const listsSnapshot = await get(ref(db, `audit_lists/${cityKey}/${studioKey}`));
-        const historySnapshot = await get(ref(db, `audit_history/${cityKey}/${studioKey}`));
-        
-        setAuditLists(listsSnapshot.val() || {});
-        setAuditHistory(historySnapshot.val() || {});
-      } catch (error) {
-        console.error('Error loading audit data:', error);
-      }
-    };
-    loadData();
-  }, [cityKey, studioKey]);
+// ─── HELPER: item name IS the category ─────────────────────────────────────
+function getItemCategory(item: UniformItem): string {
+  return item.name || (item as any).category || 'Other';
+}
 
-  const currentWeekId = useMemo(() => {
-    const now = new Date();
-    const yearStart = new Date(now.getFullYear(), 0, 1);
-    const weekNumber = Math.ceil((((now.getTime() - yearStart.getTime()) / 86400000) + yearStart.getDay() + 1) / 7);
-    return `${now.getFullYear()}-${String(weekNumber).padStart(2, '0')}`;
-  }, []);
+// ─── CAO SMART AUDIT SYSTEM ──────────────────────────────────────────────────
+//
+// Stage flow:
+//   'generate'  → show risk formula, click "Generate This Week's Audit"
+//   'scanning'  → scan one scope at a time, Next → advances through list
+//   'results'   → full results table with variance %, risk score, reason tags
+//
 
-  const canGenerate = useMemo(() => {
-    // Check if we already generated for this week
-    return !Object.values(auditLists).some((list) => list.weekId === currentWeekId);
-  }, [auditLists, currentWeekId]);
+interface AuditScope {
+  key: string;
+  name: string;
+  size: string;
+  score: number;
+  frequency: number;
+  discrepancy: number;
+  lastAuditedDays: number;
+  reasons: string[];
+  expectedBarcodes: string[];
+}
 
-  const generateAuditList = async () => {
-    if (!canGenerate) {
-      setMessage({ type: 'error', text: 'Audit list already generated for this week' });
-      return;
-    }
+interface AuditScopeResult extends AuditScope {
+  scanned: string[];
+  found: number;
+  missing: number;
+  unexpected: number;
+  variancePct: number;
+}
 
-    setLoading(true);
-    setMessage(null);
+function getWeekString(): string {
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(now.getDate() - now.getDay());
+  return `Week of ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+}
 
+function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, assignments }: AnalyticsComponentProps & { inventory: Record<string, UniformItem>; cityName: string }) {
+  const [stage, setStage] = useState<'generate' | 'scanning' | 'results'>('generate');
+  const [scopes, setScopes] = useState<AuditScope[]>([]);
+  const [scopeIndex, setScopeIndex] = useState(0);
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [currentScanned, setCurrentScanned] = useState<string[]>([]);
+  const [completedResults, setCompletedResults] = useState<AuditScopeResult[]>([]);
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; text: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [pastSessions, setPastSessions] = useState<any[]>([]);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const currentWeek = getWeekString();
+
+  const loadPastSessions = async () => {
+    if (sessionsLoaded) return;
     try {
-      // Get items in stock at this studio
-      const studioItems = Object.entries(inventory)
-        .filter(([, item]) => item.studioLocation === studioKey && item.status === 'In Stock')
-        .map(([key, item]) => ({ key, ...item }));
-
-      if (studioItems.length === 0) {
-        setMessage({ type: 'error', text: 'No items in stock to audit' });
-        setLoading(false);
-        return;
-      }
-
-      // Calculate issue frequencies from assignments
-      const itemFrequency = new Map<string, number>();
-      Object.values(assignments).forEach((assignment) => {
-        const key = `${assignment.itemName}|${assignment.itemSize}`;
-        itemFrequency.set(key, (itemFrequency.get(key) || 0) + 1);
-      });
-
-      // Get items with mismatches from history
-      const mismatchItems = new Set<string>();
-      Object.values(auditHistory).forEach((entry) => {
-        if (entry.delta !== 0) {
-          mismatchItems.add(entry.itemBarcode);
-        }
-      });
-
-      // Score items for audit priority
-      const scoredItems = studioItems.map((item) => {
-        const freqKey = `${item.name}|${item.size}`;
-        const frequency = itemFrequency.get(freqKey) || 0;
-        const hasMismatch = mismatchItems.has(item.barcode);
-        
-        // Score: high frequency + past mismatches get higher priority
-        let score = frequency;
-        if (hasMismatch) score += 100;
-        
-        // Add randomness for variety
-        score += Math.random() * 10;
-
-        return { item, score };
-      });
-
-      // Sort by score and select top items
-      scoredItems.sort((a, b) => b.score - a.score);
-
-      // Select 3-6 items, mix of high and low frequency
-      const itemCount = Math.min(6, Math.max(3, studioItems.length));
-      const selected: typeof scoredItems = [];
-
-      // Get top items (frequent/mismatched)
-      const topCount = Math.ceil(itemCount * 0.6);
-      selected.push(...scoredItems.slice(0, topCount));
-
-      // Get some random items for coverage
-      const remaining = scoredItems.slice(topCount);
-      const randomCount = itemCount - topCount;
-      for (let i = 0; i < randomCount && remaining.length > 0; i++) {
-        const randomIndex = Math.floor(Math.random() * remaining.length);
-        selected.push(remaining.splice(randomIndex, 1)[0]);
-      }
-
-      // Create audit list items
-      const auditItems: WeeklyAuditItem[] = selected.map(({ item }) => ({
-        barcode: item.barcode,
-        name: item.name,
-        size: item.size,
-        category: item.category,
-        rationale: mismatchItems.has(item.barcode) 
-          ? 'Previously had count mismatch'
-          : itemFrequency.get(`${item.name}|${item.size}`) || 0 > 5
-          ? 'High issue frequency'
-          : 'Random selection for coverage',
-        expectedLocation: studioName,
-      }));
-
-      // Create audit list
-      const auditList: WeeklyAuditList = {
-        weekId: currentWeekId,
-        generatedAt: new Date().toISOString(),
-        items: auditItems,
-        city: cityName,
-        studio: studioName,
-      };
-
-      // Save to database
-      const updates: Record<string, WeeklyAuditList | { date: string; action: string; details: string }> = {};
-      const listKey = push(ref(db, `audit_lists/${cityKey}/${studioKey}`)).key;
-      updates[`audit_lists/${cityKey}/${studioKey}/${listKey}`] = auditList;
-
-      // Log the action
-      const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
-      updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
-        date: new Date().toISOString(),
-        action: 'AUDIT_LIST_GENERATED',
-        details: `Generated weekly audit list (${currentWeekId}) with ${auditItems.length} items`,
-      };
-
-      await update(ref(db), updates);
-
-      setMessage({ type: 'success', text: `Generated audit list for week ${currentWeekId} with ${auditItems.length} items` });
-      
-      // Reload audit lists
-      const listsSnapshot = await get(ref(db, `audit_lists/${cityKey}/${studioKey}`));
-      setAuditLists(listsSnapshot.val() || {});
-    } catch (error) {
-      console.error('Generate audit list error:', error);
-      setMessage({ type: 'error', text: 'Failed to generate audit list. Please try again.' });
-    } finally {
-      setLoading(false);
-    }
+      const snap = await get(ref(db, `audit_sessions/${cityKey}/${studioKey}`));
+      const data = snap.val() || {};
+      setPastSessions(Object.values(data));
+    } catch { /* ignore */ }
+    setSessionsLoaded(true);
   };
 
-  const exportCurrentList = () => {
-    const currentList = Object.values(auditLists).find((list) => list.weekId === currentWeekId);
-    if (!currentList) {
-      setMessage({ type: 'error', text: 'No audit list for current week' });
-      return;
-    }
+  const discrepancyMap = useMemo(() => {
+    const map = new Map<string, number>();
+    pastSessions.forEach((s: any) => {
+      const key = `${s.category}|${s.size}`;
+      const disc = (s.missingBarcodes?.length || 0) + (s.unexpectedBarcodes?.length || 0);
+      map.set(key, (map.get(key) || 0) + disc);
+    });
+    return map;
+  }, [pastSessions]);
 
-    let csv = 'Barcode,Name,Size,Category,Rationale,Expected Location\n';
-    currentList.items.forEach((item) => {
-      csv += `${item.barcode},${item.name},${item.size},${item.category},${item.rationale},${item.expectedLocation}\n`;
+  const lastAuditedMap = useMemo(() => {
+    const map = new Map<string, number>();
+    pastSessions.forEach((s: any) => {
+      const key = `${s.category}|${s.size}`;
+      if (!s.completedAt) return;
+      const days = Math.floor((Date.now() - new Date(s.completedAt).getTime()) / 86400000);
+      if (!map.has(key) || days < map.get(key)!) map.set(key, days);
+    });
+    return map;
+  }, [pastSessions]);
+
+  const frequencyMap = useMemo(() => {
+    const map = new Map<string, number>();
+    Object.values(assignments)
+      .filter(a => a.studio === studioName || (a as any).issuedAtStudio === studioKey)
+      .forEach(a => {
+        const key = `${a.itemName}|${a.itemSize}`;
+        map.set(key, (map.get(key) || 0) + 1);
+      });
+    return map;
+  }, [assignments, studioName, studioKey]);
+
+  const buildRiskArray = (): AuditScope[] => {
+    const seen = new Map<string, AuditScope>();
+    Object.values(inventory)
+      .filter(item => {
+        const loc = (item.studioLocation || '').trim().toLowerCase();
+        return loc === studioName.trim().toLowerCase() || loc === studioKey.trim().toLowerCase();
+      })
+      .forEach(item => {
+        const key = `${getItemCategory(item)}|${item.size}`;
+        if (seen.has(key)) return;
+        const frequency = frequencyMap.get(key) || 0;
+        const discrepancy = discrepancyMap.get(key) || 0;
+        const lastAuditedDays = lastAuditedMap.get(key) ?? 999;
+        const score = frequency * 2 + discrepancy * 4 + Math.min(lastAuditedDays, 60) * 1;
+        seen.set(key, {
+          key, name: getItemCategory(item), size: item.size,
+          frequency, discrepancy, lastAuditedDays: lastAuditedDays === 999 ? -1 : lastAuditedDays,
+          score, reasons: [], expectedBarcodes: [],
+        });
+      });
+
+    seen.forEach((scope, key) => {
+      const [name, size] = key.split('|');
+      scope.expectedBarcodes = Object.values(inventory)
+        .filter(item => {
+          const loc = (item.studioLocation || '').trim().toLowerCase();
+          const locMatch = loc === studioName.trim().toLowerCase() || loc === studioKey.trim().toLowerCase();
+          return getItemCategory(item) === name && item.size === size && locMatch
+            && (item.status === 'Available' || item.status === 'In Stock');
+        })
+        .map(i => i.barcode);
     });
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `audit_list_${currentWeekId}_${studioName}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    return Array.from(seen.values());
   };
 
-  const currentList = useMemo(() => {
-    return Object.values(auditLists).find((list) => list.weekId === currentWeekId);
-  }, [auditLists, currentWeekId]);
+  const generateWeeklyAudit = (): AuditScope[] => {
+    const riskArray = buildRiskArray();
+    if (riskArray.length === 0) return [];
+
+    const highFreq = [...riskArray].sort((a, b) => b.frequency - a.frequency).slice(0, 2);
+    const lowFreq  = [...riskArray].sort((a, b) => a.frequency - b.frequency).slice(0, 1);
+    const highDisc = [...riskArray].sort((a, b) => b.discrepancy - a.discrepancy).slice(0, 2);
+
+    const reasonMap = new Map<string, Set<string>>();
+    highFreq.forEach(s => { if (!reasonMap.has(s.key)) reasonMap.set(s.key, new Set()); reasonMap.get(s.key)!.add('High Frequency'); });
+    lowFreq.forEach(s  => { if (!reasonMap.has(s.key)) reasonMap.set(s.key, new Set()); reasonMap.get(s.key)!.add('Low Frequency'); });
+    highDisc.forEach(s => { if (!reasonMap.has(s.key)) reasonMap.set(s.key, new Set()); reasonMap.get(s.key)!.add('Past Discrepancy'); });
+
+    const combined = [...highFreq, ...lowFreq, ...highDisc];
+    const unique = Array.from(new Map(combined.map(i => [i.key, i])).values());
+    unique.forEach(s => { s.reasons = Array.from(reasonMap.get(s.key) || []); });
+    unique.sort(() => 0.5 - Math.random());
+    const count = 3 + Math.floor(Math.random() * 4);
+    return unique.slice(0, Math.min(count, unique.length));
+  };
+
+  const handleGenerate = async () => {
+    await loadPastSessions();
+    setTimeout(() => {
+      const generated = generateWeeklyAudit();
+      if (generated.length === 0) {
+        setMessage({ type: 'warning', text: 'No inventory found at this studio to audit.' });
+        return;
+      }
+      setScopes(generated);
+      setCompletedResults([]);
+      setScopeIndex(0);
+      setCurrentScanned([]);
+      setBarcodeInput('');
+      setMessage(null);
+      setStage('scanning');
+      setTimeout(() => scanInputRef.current?.focus(), 150);
+    }, 120);
+  };
+
+  const currentScope = scopes[scopeIndex];
+
+  const addBarcode = () => {
+    const bc = barcodeInput.trim();
+    if (!bc) return;
+    if (currentScanned.includes(bc)) {
+      setMessage({ type: 'warning', text: `${bc} already scanned.` });
+      setBarcodeInput('');
+      return;
+    }
+    const isExpected = currentScope?.expectedBarcodes.includes(bc);
+    setCurrentScanned(prev => [...prev, bc]);
+    setMessage({
+      type: isExpected ? 'success' : 'warning',
+      text: isExpected ? `✓ ${bc} — matched` : `⚠ ${bc} — not in expected list`,
+    });
+    setBarcodeInput('');
+    scanInputRef.current?.focus();
+  };
+
+  const completeCurrentScope = () => {
+    if (!currentScope) return;
+    const expected = currentScope.expectedBarcodes;
+    const found    = currentScanned.filter(bc => expected.includes(bc)).length;
+    const missing  = expected.filter(bc => !currentScanned.includes(bc)).length;
+    const unexpected = currentScanned.filter(bc => !expected.includes(bc)).length;
+    const variancePct = expected.length > 0
+      ? parseFloat(((missing + unexpected) / expected.length * 100).toFixed(1))
+      : 0;
+    const result: AuditScopeResult = {
+      ...currentScope, scanned: [...currentScanned],
+      found, missing, unexpected, variancePct,
+    };
+    setCompletedResults(prev => [...prev, result]);
+
+    if (scopeIndex + 1 < scopes.length) {
+      setScopeIndex(i => i + 1);
+      setCurrentScanned([]);
+      setBarcodeInput('');
+      setMessage({ type: 'info', text: `Scope ${scopeIndex + 1} complete. Moving to next…` });
+      setTimeout(() => scanInputRef.current?.focus(), 150);
+    } else {
+      setMessage(null);
+      setStage('results');
+    }
+  };
+
+  const saveAudit = async () => {
+    setSaving(true);
+    try {
+      const ts = new Date().toISOString();
+      const updates: Record<string, any> = {};
+      const sessionKey = push(ref(db, `audit_sessions/${cityKey}/${studioKey}`)).key;
+      updates[`audit_sessions/${cityKey}/${studioKey}/${sessionKey}`] = {
+        week: currentWeek, studio: studioName, studioKey, city: cityName, cityKey,
+        completedAt: ts,
+        generatedScopes: completedResults.map(r => ({
+          name: r.name, size: r.size, expectedBarcodes: r.expectedBarcodes,
+        })),
+        results: completedResults.map(r => ({
+          category: r.name, size: r.size,
+          expected: r.expectedBarcodes.length, found: r.found,
+          missing: r.missing, unexpected: r.unexpected,
+          variancePct: r.variancePct, score: r.score, reasons: r.reasons,
+          scannedBarcodes: r.scanned,
+          missingBarcodes: r.expectedBarcodes.filter(bc => !r.scanned.includes(bc)),
+          unexpectedBarcodes: r.scanned.filter(bc => !r.expectedBarcodes.includes(bc)),
+        })),
+      };
+      const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
+      updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
+        date: ts, action: 'CAO_AUDIT',
+        details: `CAO Audit ${currentWeek} — ${studioName}: ${completedResults.length} scope(s). Missing: ${completedResults.reduce((s, r) => s + r.missing, 0)}, Unexpected: ${completedResults.reduce((s, r) => s + r.unexpected, 0)}.`,
+      };
+      await update(ref(db), updates);
+      setMessage({ type: 'success', text: '✓ Audit saved.' });
+    } catch { setMessage({ type: 'error', text: 'Failed to save audit.' }); }
+    finally { setSaving(false); }
+  };
+
+  const exportCSV = () => {
+    const headers = ['Studio', 'Week', 'Item Name', 'Size', 'Expected', 'Found', 'Missing', 'Unexpected', 'Variance %', 'Risk Score', 'Reason'];
+    const rows = completedResults.map(r => [
+      studioName, currentWeek, r.name, r.size,
+      r.expectedBarcodes.length, r.found, r.missing, r.unexpected,
+      r.variancePct, r.score, r.reasons.join(' + '),
+    ]);
+    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Weekly_Audit_${studioName}_${currentWeek.replace(/[^a-z0-9]/gi, '_')}.csv`;
+    a.click();
+  };
+
+  const reset = () => {
+    setStage('generate');
+    setScopes([]);
+    setScopeIndex(0);
+    setCurrentScanned([]);
+    setCompletedResults([]);
+    setMessage(null);
+    setBarcodeInput('');
+  };
 
   return (
     <div className="analytics-section">
-      <h3>Smart Weekly Audit List</h3>
-      <p className="text-muted">Generate a smart audit list based on usage patterns and history</p>
+      <h3>⚡ Smart Audit — CAO System</h3>
+      <p className="text-muted">
+        Risk-scored weekly audit. System selects 3–6 scopes by issue frequency, past discrepancies, and days since last audit.
+      </p>
 
-      {message && (
-        <div className={`alert alert-${message.type}`}>
-          {message.text}
+      {message && <div className={`alert alert-${message.type}`} style={{ marginBottom: '1rem' }}>{message.text}</div>}
+
+      {/* ── STAGE 1: GENERATE ── */}
+      {stage === 'generate' && (
+        <div className="cao-generate-panel">
+          <div className="cao-how-it-works">
+            <div className="cao-score-legend">
+              <span className="cao-score-pill cao-score-freq">Issue Freq × 2</span>
+              <span className="cao-score-plus">+</span>
+              <span className="cao-score-pill cao-score-disc">Discrepancy × 4</span>
+              <span className="cao-score-plus">+</span>
+              <span className="cao-score-pill cao-score-days">Days Since Audit × 1</span>
+              <span className="cao-score-eq">= Risk Score</span>
+            </div>
+            <p className="text-muted" style={{ margin: '0.5rem 0 0 0', fontSize: '0.82rem' }}>
+              3–6 highest-risk item/size combos are selected. High frequency, past discrepancies, and long-unaudited items rank highest.
+            </p>
+          </div>
+
+          <button className="btn btn-gold cao-generate-btn" onClick={handleGenerate}>
+            ⚡ Generate This Week's Audit
+          </button>
+          <div className="cao-week-label">Current week: <strong>{currentWeek}</strong> &nbsp;·&nbsp; Studio: <strong>{studioName}</strong></div>
         </div>
       )}
 
-      <div className="analytics-controls">
-        <div className="audit-info-box">
-          <strong>Current Week:</strong> {currentWeekId}
+      {/* ── STAGE 2: SCANNING ── */}
+      {stage === 'scanning' && currentScope && (
+        <div className="cao-scanning-panel">
+          <div className="cao-progress-bar-wrap">
+            {scopes.map((s, i) => (
+              <div
+                key={s.key}
+                className={`cao-progress-segment ${i < scopeIndex ? 'done' : i === scopeIndex ? 'active' : ''}`}
+                title={`${s.name} ${s.size}`}
+              />
+            ))}
+          </div>
+          <div className="cao-progress-label">Scope {scopeIndex + 1} of {scopes.length}</div>
+
+          <div className="cao-scope-header">
+            <div className="cao-scope-title">
+              Now auditing: <strong>{currentScope.name}</strong> — <strong>{currentScope.size}</strong>
+            </div>
+            <div className="cao-scope-meta">
+              <span className="cao-expected-badge">Expected: {currentScope.expectedBarcodes.length}</span>
+              <span className="cao-scanned-badge">Scanned: {currentScanned.length}</span>
+              {currentScope.reasons.map(r => (
+                <span key={r} className={`cao-reason-tag cao-reason-${r.replace(/\s+/g, '-').toLowerCase()}`}>{r}</span>
+              ))}
+            </div>
+          </div>
+
+          {currentScope.expectedBarcodes.length > 0 && (
+            <div className="cao-expected-list">
+              {currentScope.expectedBarcodes.map(bc => (
+                <span key={bc} className={`cao-barcode-chip ${currentScanned.includes(bc) ? 'found' : ''}`}>
+                  {currentScanned.includes(bc) ? '✓ ' : ''}{bc}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="cao-scan-row">
+            <input
+              ref={scanInputRef}
+              type="text"
+              value={barcodeInput}
+              onChange={e => setBarcodeInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addBarcode(); }}
+              placeholder="Scan or enter barcode…"
+              className="input-dark cao-scan-input"
+              autoFocus
+            />
+            <button onClick={addBarcode} className="btn btn-dark">Add</button>
+          </div>
+
+          {currentScanned.length > 0 && (
+            <div className="cao-scanned-list">
+              {[...currentScanned].reverse().slice(0, 8).map(bc => (
+                <div key={bc} className="cao-scanned-row">
+                  <code>{bc}</code>
+                  <span className={currentScope.expectedBarcodes.includes(bc) ? 'cao-ok' : 'cao-warn'}>
+                    {currentScope.expectedBarcodes.includes(bc) ? '✓ matched' : '⚠ unexpected'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="cao-scan-actions">
+            <button onClick={completeCurrentScope} className="btn btn-gold">
+              {scopeIndex + 1 < scopes.length ? 'Complete & Next →' : 'Complete Audit ✓'}
+            </button>
+            <button onClick={reset} className="btn btn-dark">Cancel</button>
+          </div>
         </div>
-        
-        <button
-          onClick={generateAuditList}
-          disabled={loading || !canGenerate}
-          className="btn btn-gold"
-        >
-          {loading ? 'Generating...' : canGenerate ? 'Generate Audit List' : 'Already Generated This Week'}
-        </button>
+      )}
 
-        {currentList && (
-          <button onClick={exportCurrentList} className="btn btn-outline">
-            Export Current List
-          </button>
-        )}
-      </div>
+      {/* ── STAGE 3: RESULTS ── */}
+      {stage === 'results' && (
+        <div className="cao-results-panel">
+          <div className="cao-stat-cards">
+            {[
+              { label: 'Scopes Audited', val: completedResults.length,                                                        color: 'var(--color-accent)'  },
+              { label: 'Total Missing',  val: completedResults.reduce((s, r) => s + r.missing, 0),                           color: 'var(--color-error)'   },
+              { label: 'Unexpected',     val: completedResults.reduce((s, r) => s + r.unexpected, 0),                        color: 'var(--color-warning)' },
+              { label: 'Clean Scopes',   val: completedResults.filter(r => r.missing === 0 && r.unexpected === 0).length,    color: 'var(--color-success)' },
+            ].map(s => (
+              <div key={s.label} className="cao-stat-card">
+                <div className="cao-stat-val" style={{ color: s.color }}>{s.val}</div>
+                <div className="cao-stat-label">{s.label}</div>
+              </div>
+            ))}
+          </div>
 
-      {currentList ? (
-        <>
-          <h4>Week {currentList.weekId} Audit List</h4>
-          <p className="text-muted">Generated: {new Date(currentList.generatedAt).toLocaleString()}</p>
-          
-          <div className="table-container">
+          <div className="table-container" style={{ marginTop: '1rem' }}>
             <table className="table-dark">
               <thead>
                 <tr>
-                  <th>Barcode</th>
-                  <th>Name</th>
+                  <th>Item Name</th>
                   <th>Size</th>
-                  <th>Category</th>
-                  <th>Rationale</th>
+                  <th>Expected</th>
+                  <th>Found</th>
+                  <th>Missing</th>
+                  <th>Unexpected</th>
+                  <th>Variance %</th>
+                  <th>Risk Score</th>
+                  <th>Reason</th>
                 </tr>
               </thead>
               <tbody>
-                {currentList.items.map((item, index) => (
-                  <tr key={index}>
-                    <td><code>{item.barcode}</code></td>
-                    <td>{item.name}</td>
-                    <td>{item.size}</td>
-                    <td>{item.category}</td>
-                    <td className="text-muted">{item.rationale}</td>
+                {completedResults.map((r, i) => (
+                  <tr key={i} className={r.missing > 0 || r.unexpected > 0 ? 'cao-row-alert' : ''}>
+                    <td><strong>{r.name}</strong></td>
+                    <td>{r.size}</td>
+                    <td>{r.expectedBarcodes.length}</td>
+                    <td className="cao-td-found">{r.found}</td>
+                    <td className={r.missing > 0 ? 'cao-td-missing' : ''}>{r.missing}</td>
+                    <td className={r.unexpected > 0 ? 'cao-td-unexpected' : ''}>{r.unexpected}</td>
+                    <td className={r.variancePct > 0 ? 'cao-td-variance' : ''}>{r.variancePct}%</td>
+                    <td>{r.score}</td>
+                    <td>
+                      {r.reasons.map(reason => (
+                        <span key={reason} className={`cao-reason-tag cao-reason-${reason.replace(/\s+/g, '-').toLowerCase()}`}>
+                          {reason}
+                        </span>
+                      ))}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </>
-      ) : (
-        <p className="text-muted">No audit list generated for the current week yet</p>
-      )}
 
-      <div className="analytics-info">
-        <h4>How It Works</h4>
-        <ul className="text-muted">
-          <li>Selects 3-6 items per week for audit</li>
-          <li>Prioritizes items with past count mismatches</li>
-          <li>Includes high-frequency items (issued often)</li>
-          <li>Adds random items for comprehensive coverage over time</li>
-          <li>Can only generate once per week</li>
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-// Smart Audit Scanner Component
-function SmartAuditScanner({ cityKey, cityName, studioKey, studioName, inventory }: AnalyticsComponentProps & { inventory: Record<string, UniformItem>; cityName: string; studioName: string }) {
-  const [category, setCategory] = useState('');
-  const [size, setSize] = useState('');
-  const [scanning, setScanning] = useState(false);
-  const [scannedBarcodes, setScannedBarcodes] = useState<Set<string>>(new Set());
-  const [barcodeInput, setBarcodeInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info' | 'warning'; text: string } | null>(null);
-  const [auditCompleted, setAuditCompleted] = useState(false);
-  const [auditResults, setAuditResults] = useState<{
-    expected: string[];
-    found: string[];
-    missing: string[];
-    unexpected: string[];
-  } | null>(null);
-
-  // Get unique categories and sizes from inventory
-  const categories = useMemo(() => {
-    const cats = new Set<string>();
-    Object.values(inventory).forEach(item => {
-      if (item.category) cats.add(item.category);
-    });
-    return Array.from(cats).sort();
-  }, [inventory]);
-
-  const sizes = useMemo(() => {
-    const szs = new Set<string>();
-    Object.values(inventory).forEach(item => {
-      if (item.size) szs.add(item.size);
-    });
-    return Array.from(szs).sort();
-  }, [inventory]);
-
-  // Calculate expected items: Only Available items (excludes In Hamper and At Laundry by checking for Available status)
-  const expectedItems = useMemo(() => {
-    if (!category || !size) return [];
-    
-    return Object.entries(inventory)
-      .filter(([, item]) => 
-        item.category === category &&
-        item.size === size &&
-        item.studioLocation === studioKey &&
-        item.status === 'Available' // Only Available items
-      )
-      .map(([, item]) => item.barcode);
-  }, [inventory, category, size, studioKey]);
-
-  const handleStartScan = () => {
-    if (!category || !size) {
-      setMessage({ type: 'error', text: 'Please select category and size' });
-      return;
-    }
-    
-    if (expectedItems.length === 0) {
-      setMessage({ type: 'warning', text: 'No Available items found for this category/size at this studio' });
-      return;
-    }
-
-    setScanning(true);
-    setScannedBarcodes(new Set());
-    setAuditCompleted(false);
-    setAuditResults(null);
-    setMessage({ type: 'info', text: `Scanning started. Expected ${expectedItems.length} item(s). Scan items now.` });
-  };
-
-  const handleAddBarcode = () => {
-    const barcode = barcodeInput.trim();
-    if (!barcode) return;
-
-    const newScanned = new Set(scannedBarcodes);
-    
-    if (newScanned.has(barcode)) {
-      setMessage({ type: 'warning', text: `Barcode ${barcode} already scanned` });
-    } else {
-      newScanned.add(barcode);
-      setScannedBarcodes(newScanned);
-      
-      const isExpected = expectedItems.includes(barcode);
-      if (isExpected) {
-        setMessage({ type: 'success', text: `✓ Barcode ${barcode} found (expected)` });
-      } else {
-        setMessage({ type: 'warning', text: `! Barcode ${barcode} scanned but not expected in this audit` });
-      }
-    }
-    
-    setBarcodeInput('');
-  };
-
-  const handleCompleteScan = async () => {
-    if (!scanning) return;
-
-    const found = Array.from(scannedBarcodes).filter(bc => expectedItems.includes(bc));
-    const missing = expectedItems.filter(bc => !scannedBarcodes.has(bc));
-    const unexpected = Array.from(scannedBarcodes).filter(bc => !expectedItems.includes(bc));
-
-    setAuditResults({
-      expected: expectedItems,
-      found,
-      missing,
-      unexpected,
-    });
-
-    setScanning(false);
-    setAuditCompleted(true);
-    setMessage({ 
-      type: 'info', 
-      text: `Audit complete: ${found.length} found, ${missing.length} missing, ${unexpected.length} unexpected` 
-    });
-  };
-
-  const handleSaveAudit = async () => {
-    if (!auditResults) return;
-
-    setLoading(true);
-    setMessage(null);
-
-    try {
-      const updates: Record<string, any> = {};
-      const timestamp = new Date().toISOString();
-
-      // Store audit session
-      const sessionKey = push(ref(db, `audit_sessions/${cityKey}/${studioKey}`)).key;
-      updates[`audit_sessions/${cityKey}/${studioKey}/${sessionKey}`] = {
-        id: sessionKey,
-        category,
-        size,
-        studio: studioName,
-        studioKey,
-        city: cityName,
-        cityKey,
-        startedAt: timestamp,
-        completedAt: timestamp,
-        startedBy: 'web-user', // TODO: Use actual user
-        expectedBarcodes: auditResults.expected,
-        scannedBarcodes: Array.from(scannedBarcodes),
-        missingBarcodes: auditResults.missing,
-        unexpectedBarcodes: auditResults.unexpected,
-      };
-
-      // Update missing items status to 'Missing' (if we want to flag them)
-      // Note: This is optional - problem statement says "mark missing"
-      // For now, we'll just log without changing status to avoid data loss
-
-      // Log the audit action
-      const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
-      updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
-        date: timestamp,
-        action: 'AUDIT_COMPLETED',
-        details: `Smart Audit: ${category} size ${size} at ${studioName} - Expected: ${auditResults.expected.length}, Found: ${auditResults.found.length}, Missing: ${auditResults.missing.length}`,
-      };
-
-      await update(ref(db), updates);
-
-      setMessage({ type: 'success', text: 'Audit saved successfully! You can now export the results.' });
-    } catch (error) {
-      console.error('Save audit error:', error);
-      setMessage({ type: 'error', text: 'Failed to save audit. Please try again.' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleExportAudit = () => {
-    if (!auditResults) return;
-
-    const csv = [
-      'Category,Size,Studio,Expected Count,Found Count,Missing Count,Missing Barcodes',
-      `${category},${size},${studioName},${auditResults.expected.length},${auditResults.found.length},${auditResults.missing.length},"${auditResults.missing.join(', ')}"`,
-      '',
-      'Expected Barcodes:',
-      ...auditResults.expected.map(bc => bc),
-      '',
-      'Found Barcodes:',
-      ...auditResults.found.map(bc => bc),
-      '',
-      'Missing Barcodes:',
-      ...auditResults.missing.map(bc => bc),
-      '',
-      'Unexpected Barcodes:',
-      ...auditResults.unexpected.map(bc => bc),
-    ].join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    const timestamp = new Date().toISOString().split('T')[0];
-    link.setAttribute('href', url);
-    link.setAttribute('download', `audit_${category}_${size}_${studioName}_${timestamp}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    setMessage({ type: 'success', text: 'Audit results exported!' });
-  };
-
-  const handleReset = () => {
-    setCategory('');
-    setSize('');
-    setScanning(false);
-    setScannedBarcodes(new Set());
-    setBarcodeInput('');
-    setAuditCompleted(false);
-    setAuditResults(null);
-    setMessage(null);
-  };
-
-  return (
-    <div className="analytics-section">
-      <h3>Smart Audit Scanner</h3>
-      <p className="text-muted">Scope by category and size, scan items, compare with expected inventory</p>
-
-      {message && (
-        <div className={`alert alert-${message.type}`}>
-          {message.text}
+          <div className="cao-results-actions">
+            <button onClick={saveAudit} disabled={saving} className="btn btn-gold">
+              {saving ? 'Saving…' : '💾 Save Audit'}
+            </button>
+            <button onClick={exportCSV} className="btn btn-dark">↓ Export CSV</button>
+            <button onClick={reset} className="btn btn-secondary">New Audit</button>
+          </div>
+          <p className="text-muted" style={{ marginTop: '0.75rem', fontSize: '0.8rem' }}>
+            {currentWeek} · {studioName}
+          </p>
         </div>
       )}
-
-      {!scanning && !auditCompleted && (
-        <div className="audit-setup">
-          <div className="form-group">
-            <label>Category</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="input-dark"
-            >
-              <option value="">-- Select Category --</option>
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label>Size</label>
-            <select
-              value={size}
-              onChange={(e) => setSize(e.target.value)}
-              className="input-dark"
-            >
-              <option value="">-- Select Size --</option>
-              {sizes.map(sz => (
-                <option key={sz} value={sz}>{sz}</option>
-              ))}
-            </select>
-          </div>
-
-          {category && size && (
-            <div className="audit-info-box" style={{ marginBottom: '1rem' }}>
-              <strong>Expected Items:</strong> {expectedItems.length} Available item(s) at {studioName}
-              <br />
-              <small className="text-muted">
-                (Excludes items In Hamper or At Laundry)
-              </small>
-            </div>
-          )}
-
-          <button
-            onClick={handleStartScan}
-            className="btn btn-gold"
-            disabled={!category || !size}
-          >
-            Start Audit Scan
-          </button>
-        </div>
-      )}
-
-      {scanning && (
-        <div className="audit-scanning">
-          <div className="audit-info-box" style={{ marginBottom: '1rem' }}>
-            <strong>Auditing:</strong> {category} - Size {size} at {studioName}
-            <br />
-            <strong>Expected:</strong> {expectedItems.length} | <strong>Scanned:</strong> {scannedBarcodes.size}
-          </div>
-
-          <div className="form-group">
-            <label>Scan or Enter Barcode</label>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input
-                type="text"
-                value={barcodeInput}
-                onChange={(e) => setBarcodeInput(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddBarcode();
-                  }
-                }}
-                placeholder="Scan or type barcode"
-                className="input-dark"
-                autoFocus
-              />
-              <button onClick={handleAddBarcode} className="btn btn-secondary">
-                Add
-              </button>
-            </div>
-          </div>
-
-          <div className="scanned-list" style={{ marginBottom: '1rem', maxHeight: '200px', overflowY: 'auto' }}>
-            <strong>Scanned Barcodes:</strong>
-            {scannedBarcodes.size === 0 ? (
-              <p className="text-muted">No items scanned yet</p>
-            ) : (
-              <ul style={{ listStyle: 'none', padding: 0 }}>
-                {Array.from(scannedBarcodes).map(bc => (
-                  <li key={bc} style={{ padding: '0.25rem 0' }}>
-                    <code>{bc}</code>
-                    {expectedItems.includes(bc) ? ' ✓' : ' (unexpected)'}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={handleCompleteScan} className="btn btn-gold">
-              Complete Audit
-            </button>
-            <button onClick={handleReset} className="btn btn-secondary">
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {auditCompleted && auditResults && (
-        <div className="audit-results">
-          <h4>Audit Results</h4>
-          <div className="audit-summary">
-            <div className="audit-stat">
-              <strong>Category:</strong> {category}
-            </div>
-            <div className="audit-stat">
-              <strong>Size:</strong> {size}
-            </div>
-            <div className="audit-stat">
-              <strong>Studio:</strong> {studioName}
-            </div>
-            <div className="audit-stat">
-              <strong>Expected:</strong> {auditResults.expected.length}
-            </div>
-            <div className="audit-stat" style={{ color: '#4ade80' }}>
-              <strong>Found:</strong> {auditResults.found.length}
-            </div>
-            <div className="audit-stat" style={{ color: '#f87171' }}>
-              <strong>Missing:</strong> {auditResults.missing.length}
-            </div>
-            <div className="audit-stat" style={{ color: '#fbbf24' }}>
-              <strong>Unexpected:</strong> {auditResults.unexpected.length}
-            </div>
-          </div>
-
-          {auditResults.missing.length > 0 && (
-            <div style={{ marginTop: '1rem' }}>
-              <h5>Missing Items:</h5>
-              <div className="table-container">
-                <table className="table-dark">
-                  <thead>
-                    <tr>
-                      <th>Barcode</th>
-                      <th>Name</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditResults.missing.map(barcode => {
-                      const item = Object.values(inventory).find(i => i.barcode === barcode);
-                      return (
-                        <tr key={barcode}>
-                          <td><code>{barcode}</code></td>
-                          <td>{item?.name || 'Unknown'}</td>
-                          <td>{item?.status || 'Unknown'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {auditResults.unexpected.length > 0 && (
-            <div style={{ marginTop: '1rem' }}>
-              <h5>Unexpected Items:</h5>
-              <div className="table-container">
-                <table className="table-dark">
-                  <thead>
-                    <tr>
-                      <th>Barcode</th>
-                      <th>Name</th>
-                      <th>Category</th>
-                      <th>Size</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditResults.unexpected.map(barcode => {
-                      const item = Object.values(inventory).find(i => i.barcode === barcode);
-                      return (
-                        <tr key={barcode}>
-                          <td><code>{barcode}</code></td>
-                          <td>{item?.name || 'Not in inventory'}</td>
-                          <td>{item?.category || '-'}</td>
-                          <td>{item?.size || '-'}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
-            <button onClick={handleSaveAudit} disabled={loading} className="btn btn-gold">
-              {loading ? 'Saving...' : 'Save Audit'}
-            </button>
-            <button onClick={handleExportAudit} className="btn btn-outline">
-              Export CSV
-            </button>
-            <button onClick={handleReset} className="btn btn-secondary">
-              New Audit
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="analytics-info" style={{ marginTop: '2rem' }}>
-        <h4>How It Works</h4>
-        <ul className="text-muted">
-          <li><strong>Scope:</strong> Select category and size to define the audit scope</li>
-          <li><strong>Expected Items:</strong> Only Available items are included (excludes In Hamper and At Laundry)</li>
-          <li><strong>Scan:</strong> Scan or enter barcodes of items physically present</li>
-          <li><strong>Compare:</strong> System compares scanned vs expected items</li>
-          <li><strong>Results:</strong> View found, missing, and unexpected items</li>
-          <li><strong>Export:</strong> Download CSV with full audit details including missing barcodes</li>
-          <li><strong>Log:</strong> Audit is saved with timestamp and user for traceability</li>
-        </ul>
-      </div>
     </div>
   );
 }

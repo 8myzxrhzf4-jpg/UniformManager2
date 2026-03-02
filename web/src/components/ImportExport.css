@@ -98,3 +98,181 @@
   margin-bottom: var(--spacing-xs);
   line-height: 1.5;
 }
+
+/* Modern tabs for Import/Export top-level (keeps existing .ie-tabs/.ie-tab) */
+.ie-tabs,
+.tabs.modern-tabs,
+.modern-tabs {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border, #374151);
+  margin-bottom: var(--spacing-md);
+}
+
+/* Generic modern-tab rules (applies to ie-tab and import-type-btn as we add modern-tab) */
+.modern-tab,
+.import-type-btn.modern-tab,
+.ie-tab.modern-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  border-radius: 6px;
+  transition: color .12s ease, transform .06s ease;
+}
+
+/* Icon alignment inside modern buttons */
+.modern-tab svg,
+.import-type-btn .import-type-icon,
+.ie-tab svg {
+  display: block;
+  opacity: 0.95;
+  line-height: 0;
+}
+
+/* Hover / active behavior */
+.modern-tab:hover,
+.import-type-btn.modern-tab:hover,
+.ie-tab.modern-tab:hover {
+  color: var(--color-text-primary);
+  transform: translateY(-1px);
+}
+
+.modern-tab.active,
+.import-type-btn.modern-tab.active,
+.ie-tab.modern-tab.active {
+  color: var(--color-accent);
+  /* subtle background for import-type buttons to read like selected card */
+}
+
+/* Import-type selector specific look (these are the bigger card-like buttons used inside ImportPanel) */
+.import-type-selector,
+.import-type-selector.tabs {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-md);
+}
+
+.import-type-btn,
+.import-type-btn.modern-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-text-primary);
+  transition: transform .06s ease, border-color .12s ease, background .12s ease;
+}
+
+/* icon inside import-type */
+.import-type-btn .import-type-icon {
+  font-size: 1.1rem;
+  opacity: .95;
+}
+
+/* hover and active */
+.import-type-btn:hover { transform: translateY(-2px); border-color: var(--color-accent); }
+.import-type-btn.active,
+.import-type-btn.modern-tab.active {
+  background: rgba(212,175,55,0.06);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* Small responsive tweaks */
+@media (max-width: 768px) {
+  .import-type-selector, .ie-tabs, .ops-tabs { flex-wrap: wrap; gap: 8px; }
+  .import-type-btn, .ie-tab, .ops-tab { padding: 6px 8px; font-size: 0.9rem; }
+}
+
+/* ─── Export date section ─────────────────────────────────────────────────── */
+.export-date-section {
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.date-preset-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: var(--spacing-sm);
+}
+
+.btn-preset {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.3rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-preset:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.btn-preset-clear {
+  color: var(--color-error);
+  border-color: var(--color-error);
+  background: transparent;
+  opacity: 0.75;
+}
+.btn-preset-clear:hover { opacity: 1; }
+
+.export-date-hint {
+  font-size: 0.8rem;
+  color: var(--color-accent);
+  margin: var(--spacing-xs) 0 0 0;
+}
+
+/* ─── Export cards ────────────────────────────────────────────────────────── */
+.export-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.export-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast);
+}
+.export-card:hover { border-color: var(--color-accent); }
+
+.export-card-left {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  flex: 1;
+  min-width: 0;
+}
+.export-card-icon { font-size: 1.5rem; flex-shrink: 0; }
+.export-card-desc {
+  margin: 0.15rem 0 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+.export-card-extra { margin-top: 0.4rem; }

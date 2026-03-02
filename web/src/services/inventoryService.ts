@@ -17,7 +17,7 @@ export function inventoryPathForCity(cityKey: string) {
 export async function writeInventoryItems(cityKey: string, items: UniformItem[]) {
   const basePath = inventoryPathForCity(cityKey);
   const updates: Record<string, any> = {};
-  const ref = firebase.database().ref();
+  const ref = firebase.database().ref('');
 
   items.forEach(item => {
     const newKey = ref.child(basePath).push().key!;

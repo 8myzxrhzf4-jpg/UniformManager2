@@ -1,0 +1,199 @@
+
+``css name=web/src/components/ImportExport.css
+.import-export-container {
+  margin-bottom: var(--spacing-lg);
+}
+
+.import-export-container h2 {
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.import-content h3,
+.export-content h3 {
+  margin: 0 0 var(--spacing-sm) 0;
+  color: var(--color-text-primary);
+  font-size: 1.125rem;
+}
+
+.file-input {
+  width: 100%;
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.file-input::-webkit-file-upload-button {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+  color: var(--color-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 600;
+  margin-right: var(--spacing-sm);
+}
+
+.file-input::-webkit-file-upload-button:hover {
+  background: linear-gradient(135deg, var(--color-accent-light) 0%, var(--color-accent) 100%);
+}
+
+.preview-section {
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background-color: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.preview-section h4 {
+  margin: 0 0 var(--spacing-md) 0;
+  color: var(--color-accent);
+  font-size: 1rem;
+}
+
+.error-list {
+  margin: var(--spacing-sm) 0 0 0;
+  padding-left: var(--spacing-lg);
+  color: var(--color-error);
+}
+
+.error-list li {
+  margin-bottom: var(--spacing-xs);
+}
+
+.button-group {
+  margin-top: var(--spacing-lg);
+  display: flex;
+  gap: var(--spacing-md);
+}
+
+.date-range-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.export-info {
+  margin-top: var(--spacing-xl);
+  padding: var(--spacing-md);
+  background-color: var(--color-bg-tertiary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.export-info h4 {
+  margin: 0 0 var(--spacing-sm) 0;
+  color: var(--color-accent);
+  font-size: 1rem;
+}
+
+.export-info ul {
+  margin: 0;
+  padding-left: var(--spacing-lg);
+}
+
+.export-info li {
+  margin-bottom: var(--spacing-xs);
+  line-height: 1.5;
+}
+
+/* Modern tabs for Import/Export top-level (keeps existing .ie-tabs/.ie-tab) */
+.ie-tabs,
+.tabs.modern-tabs,
+.modern-tabs {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border, #374151);
+  margin-bottom: var(--spacing-md);
+}
+
+/* Generic modern-tab rules (applies to ie-tab and import-type-btn as we add modern-tab) */
+.modern-tab,
+.import-type-btn.modern-tab,
+.ie-tab.modern-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  border-radius: 6px;
+  transition: color .12s ease, transform .06s ease;
+}
+
+/* Icon alignment inside modern buttons */
+.modern-tab svg,
+.import-type-btn .import-type-icon,
+.ie-tab svg {
+  display: block;
+  opacity: 0.95;
+  line-height: 0;
+}
+
+/* Hover / active behavior */
+.modern-tab:hover,
+.import-type-btn.modern-tab:hover,
+.ie-tab.modern-tab:hover {
+  color: var(--color-text-primary);
+  transform: translateY(-1px);
+}
+
+.modern-tab.active,
+.import-type-btn.modern-tab.active,
+.ie-tab.modern-tab.active {
+  color: var(--color-accent);
+  /* subtle background for import-type buttons to read like selected card */
+}
+
+/* Import-type selector specific look (these are the bigger card-like buttons used inside ImportPanel) */
+.import-type-selector,
+.import-type-selector.tabs {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-md);
+}
+
+.import-type-btn,
+.import-type-btn.modern-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: var(--color-text-primary);
+  transition: transform .06s ease, border-color .12s ease, background .12s ease;
+}
+
+/* icon inside import-type */
+.import-type-btn .import-type-icon {
+  font-size: 1.1rem;
+  opacity: .95;
+}
+
+/* hover and active */
+.import-type-btn:hover { transform: translateY(-2px); border-color: var(--color-accent); }
+.import-type-btn.active,
+.import-type-btn.modern-tab.active {
+  background: rgba(212,175,55,0.06);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* Small responsive tweaks */
+@media (max-width: 768px) {
+  .import-type-selector, .ie-tabs, .ops-tabs { flex-wrap: wrap; gap: 8px; }
+  .import-type-btn, .ie-tab, .ops-tab { padding: 6px 8px; font-size: 0.9rem; }
+}

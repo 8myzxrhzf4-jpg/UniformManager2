@@ -1,0 +1,35 @@
+``css name=web/src/components/Operations.css .operations-container { margin-bottom: var(--spacing-lg); }
+
+.operations-container h2 { margin: 0 0 var(--spacing-md) 0; }
+
+.tab-content { padding-top: var(--spacing-md); }
+
+.operation-content h3 { margin: 0 0 var(--spacing-sm) 0; color: var(--color-text-primary); font-size: 1.125rem; }
+
+.item-list { max-height: 300px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--spacing-sm); background-color: var(--color-bg-tertiary); }
+
+.item-checkbox { display: flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm); margin-bottom: var(--spacing-xs); cursor: pointer; border-radius: var(--radius-sm); transition: background-color var(--transition-fast); }
+
+.item-checkbox:hover { background-color: var(--color-bg-secondary); }
+
+.item-checkbox input[type="checkbox"] { cursor: pointer; width: 18px; height: 18px; }
+
+.item-checkbox span { color: var(--color-text-primary); font-size: 0.9375rem; }
+
+.form-group textarea { resize: vertical; min-height: 80px; }
+
+/* ─── OPS TABS (modern) ─────────────────────────────────────────────────────── */
+
+/* Container uses same .ops-tabs but also accepts .tabs.modern-tabs for consistent layout */ .ops-tabs, .tabs.modern-tabs, .modern-tabs { display: flex; gap: 14px; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--color-border, #374151); margin-bottom: var(--spacing-md); }
+
+/* Keep existing ops-tab selector but ensure modern-tab rules apply */ .ops-tab, .ops-tab.modern-tab, .modern-tab.ops-tab { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; background: transparent; border: none; cursor: pointer; font-weight: 600; color: var(--color-text-secondary); border-radius: 6px; transition: color .12s ease, transform .06s ease; }
+
+/* Icon spacing inside ops tab */ .ops-tab .ops-tab-icon { display: inline-block; opacity: 0.95; line-height: 0; }
+
+/* Hover / active */ .ops-tab.modern-tab:hover, .ops-tab:hover { color: var(--color-text-primary); transform: translateY(-1px); }
+
+.ops-tab.modern-tab.active, .ops-tab.active { color: var(--color-accent); }
+
+/* If you used an underline indicator, keep support */ .ops-tab .tab-underline, .modern-tab .tab-underline { position: absolute; bottom: -1px; left: 0; width: 100%; height: 2px; background: var(--color-accent, #fbbf24); border-radius: 2px; }
+
+/* Smaller screens */ @media (max-width: 768px) { .ops-tabs, .tabs.modern-tabs, .modern-tabs { gap: 8px; flex-wrap: wrap; } .ops-tab, .modern-tab { padding: 6px 8px; font-size: 0.9rem; } }

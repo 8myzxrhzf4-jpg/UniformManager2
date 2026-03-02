@@ -1,17 +1,31 @@
 // Data models aligned with Firebase Realtime Database schema
 
 // Valid uniform status values
-export type UniformStatus = 
-  | 'Available'      // Available for issue (same as "In Stock")
-  | 'In Stock'       // Available for issue (legacy, treated as "Available")
-  | 'Issued'         // Issued to a game presenter
-  | 'In Hamper'      // Returned to hamper at studio, awaiting laundry pickup
-  | 'At Laundry'     // Picked up by laundry service
-  | 'Damaged'        // Damaged and out of service
-  | 'Lost';          // Lost and out of service
+export type UniformStatus =
+  | 'Available'
+  | 'In Stock'     // legacy → treated as Available
+  | 'Issued'
+  | 'In Hamper'
+  | 'At Laundry'
+  | 'Damaged'
+  | 'Lost';
 
 // Valid role types
-export type UserRole = 'Super User' | 'Admin' | 'Staff' | 'Auditor';
+export type UserRole = 'Super User' | 'Admin' | 'City Admin' | 'Staff';
+export type AccountStatus = 'pending' | 'approved' | 'rejected';
+
+// ── NEW: user record stored in Firebase users/{uid} ───────────────────────────
+export interface UserRecord {
+  uid: string;
+  email: string;
+  displayName?: string;
+  role: UserRole;
+  status: AccountStatus;
+  requestedAt: string;
+  requestedCity?: string;   // ✅ ADD THIS
+  approvedAt?: string;
+  assignedCities?: string[];
+}
 
 export interface Studio {
   name: string;
@@ -22,21 +36,20 @@ export interface Studio {
 export interface City {
   name: string;
   studios: Record<string, Studio>;
+  laundryEnabled?: boolean; // defaults to true when absent
 }
 
 export interface UniformItem {
   name: string;
   size: string;
   barcode: string;
-  status: UniformStatus | string; // Allow string for backward compatibility
+  status: UniformStatus | string;
   category: string;
   studioLocation: string;
-  // Issue tracking
   issuedAtStudio?: string;
   issuedAtCity?: string;
   issuedBy?: string;
   issuedAt?: string;
-  // Return tracking
   returnedAtStudio?: string;
   returnedBy?: string;
   returnedAt?: string;
@@ -48,48 +61,44 @@ export interface LogEntry {
   details: string;
 }
 
-// Game Presenter (GP) interface
 export interface GamePresenter {
   name: string;
-  barcode?: string;  // GP ID card
+  barcode?: string;
   city?: string;
   studio?: string;
 }
 
-// User authentication and roles
 export interface User {
   uid: string;
   email: string;
   role: UserRole;
-  city?: string;      // For non-Super users, their assigned city
-  studios?: string[]; // For non-Super users, their assigned studios
+  city?: string;
+  studios?: string[];
 }
 
-// Assignment tracking
 export interface Assignment {
   itemBarcode: string;
   itemName: string;
   itemSize: string;
   gpName: string;
   gpBarcode?: string;
-  // Issue tracking
   issuedAt: string;
   issuedAtStudio: string;
   issuedAtCity: string;
   issuedBy?: string;
-  // Return tracking
   returnedAt?: string;
   returnedAtStudio?: string;
   returnedBy?: string;
   status: 'active' | 'returned';
   city: string;
   studio: string;
+  issueReason?: string;
+  issueReasonLabel?: string;
 }
 
-// Laundry order tracking
 export interface LaundryOrder {
   orderNumber: string;
-  items: string[]; // Array of item barcodes
+  items: string[];
   createdAt: string;
   pickedUpAt?: string;
   returnedAt?: string;
@@ -99,7 +108,6 @@ export interface LaundryOrder {
   itemCount: number;
 }
 
-// Damage record
 export interface DamageRecord {
   itemBarcode: string;
   itemName: string;
@@ -111,20 +119,18 @@ export interface DamageRecord {
   studio: string;
 }
 
-// Analytics: Audit history entry
 export interface AuditHistoryEntry {
-  weekId: string; // Format: YYYY-WW (e.g., 2026-06)
+  weekId: string;
   itemBarcode: string;
   itemName: string;
   itemSize: string;
   expectedCount: number;
   actualCount: number;
-  delta: number; // actualCount - expectedCount
+  delta: number;
   auditedAt: string;
   auditedBy?: string;
 }
 
-// Smart Audit: Audit session for scanning and comparing
 export interface AuditSession {
   id: string;
   category: string;
@@ -136,13 +142,12 @@ export interface AuditSession {
   startedAt: string;
   startedBy: string;
   completedAt?: string;
-  expectedBarcodes: string[]; // Expected items (Available only, excluding laundry states)
-  scannedBarcodes: string[];  // Actually found items
-  missingBarcodes: string[];  // Expected but not found
-  unexpectedBarcodes: string[]; // Found but not expected
+  expectedBarcodes: string[];
+  scannedBarcodes: string[];
+  missingBarcodes: string[];
+  unexpectedBarcodes: string[];
 }
 
-// Smart Audit: Audit result for CSV export
 export interface AuditResult {
   category: string;
   size: string;
@@ -155,44 +160,40 @@ export interface AuditResult {
   auditedBy: string;
 }
 
-// Analytics: Weekly audit list
 export interface WeeklyAuditItem {
   barcode: string;
   name: string;
   size: string;
   category: string;
-  rationale: string; // Why this item was selected
+  rationale: string;
   expectedLocation: string;
 }
 
 export interface WeeklyAuditList {
-  weekId: string; // Format: YYYY-WW
+  weekId: string;
   generatedAt: string;
   items: WeeklyAuditItem[];
   city: string;
   studio: string;
 }
 
-// Analytics: GP routine issue summary
 export interface GPIssueSummary {
   gpName: string;
   gpBarcode?: string;
   issueCount: number;
   lastIssued?: string;
-  items: Record<string, number>; // itemName -> count
+  items: Record<string, number>;
 }
 
-// Analytics: Item demand summary
 export interface ItemDemandSummary {
   itemName: string;
   size: string;
   category: string;
   totalIssued: number;
   avgPerWeek: number;
-  suggestedStock: number; // avgPerWeek * safetyFactor
+  suggestedStock: number;
 }
 
-// Analytics: Item lifespan summary
 export interface ItemLifespanSummary {
   category: string;
   avgLifespanDays: number;
@@ -202,7 +203,6 @@ export interface ItemLifespanSummary {
   maxLifespanDays?: number;
 }
 
-// CSV Import types
 export interface CSVImportRow {
   name: string;
   size: string;

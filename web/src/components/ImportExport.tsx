@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { ref, update, push, get } from 'firebase/database';
 import { db } from '../firebase';
+import { UploadCloud, DownloadCloud } from 'lucide-react';
 import type { UniformItem, Assignment, LaundryOrder, LogEntry, GamePresenter } from '../types';
 import './ImportExport.css';
 
@@ -24,8 +25,12 @@ function normalizeStatus(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return 'Available';
   const found = VALID_STATUSES.find(s => s.toLowerCase() === trimmed.toLowerCase());
-  if (found === 'In Stock') return 'Available'; // normalize
+  if (found === 'In Stock') return 'Available';
   return found || 'Available';
+}
+
+function toDateInput(d: Date): string {
+  return d.toISOString().split('T')[0];
 }
 
 // ─── CSV HELPERS ──────────────────────────────────────────────────────────────
@@ -136,18 +141,13 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
   };
 
   const handleImport = async () => {
-    if (!cityKey || !cityKey.trim()) { setParseErrors(["No city selected — please select a City from the sidebar first"]); return; }
-    if (!cityKey) {
-      setParseErrors(["Please select a City and Studio before importing"]);
-      return;
-    }
+    if (!cityKey || !cityKey.trim()) { setParseErrors(['No city selected — please select a City from the sidebar first']); return; }
     if (parseErrors.length > 0 || parsedRows.length === 0) return;
     setLoading(true);
     setResult(null);
 
     try {
       const updates: Record<string, any> = {};
-      const dbRef = ref(db);
       let added = 0;
       const skipped: string[] = [];
 
@@ -164,33 +164,23 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
           const category = row['category'] || 'Other';
           const studio = row['studio'] || row['studiolocation'] || studioName;
 
-          if (!name || !size || !barcode) {
-            skipped.push(`Row ${i + 2}: missing name/size/barcode`);
-            continue;
-          }
-          if (existingBarcodes.has(barcode) || batchBarcodes.has(barcode)) {
-            skipped.push(`Row ${i + 2}: duplicate barcode "${barcode}"`);
-            continue;
-          }
+          if (!name || !size || !barcode) { skipped.push(`Row ${i + 2}: missing name/size/barcode`); continue; }
+          if (existingBarcodes.has(barcode) || batchBarcodes.has(barcode)) { skipped.push(`Row ${i + 2}: duplicate barcode "${barcode}"`); continue; }
 
           batchBarcodes.add(barcode);
           const newKey = push(ref(db, `inventory/${cityKey}`)).key!;
-          updates[`inventory/${cityKey}/${newKey}`] = {
-            name, size, barcode, status, category, studioLocation: studio,
-          };
+          updates[`inventory/${cityKey}/${newKey}`] = { name, size, barcode, status, category, studioLocation: studio };
           added++;
         }
 
         if (added > 0) {
           const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
           updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
-            date: new Date().toISOString(),
-            action: 'IMPORT',
+            date: new Date().toISOString(), action: 'IMPORT',
             details: `Imported ${added} inventory item(s) to ${cityName}`,
           };
         }
       } else {
-        // GP import
         const existingIds = new Set(Object.values(gamePresenters).map(gp => gp.barcode).filter(Boolean));
         const batchIds = new Set<string>();
 
@@ -199,27 +189,17 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
           const name = row['dealer'] || row['name'] || '';
           const idCard = row['id card'] || row['barcode'] || '';
 
-          if (!name || !idCard) {
-            skipped.push(`Row ${i + 2}: missing name or ID card`);
-            continue;
-          }
-          if (existingIds.has(idCard) || batchIds.has(idCard)) {
-            skipped.push(`Row ${i + 2}: duplicate ID card "${idCard}"`);
-            continue;
-          }
+          if (!name || !idCard) { skipped.push(`Row ${i + 2}: missing name or ID card`); continue; }
+          if (existingIds.has(idCard) || batchIds.has(idCard)) { skipped.push(`Row ${i + 2}: duplicate ID card "${idCard}"`); continue; }
 
           batchIds.add(idCard);
           const gpKey = push(ref(db, `gamePresenters/${cityKey}`)).key!;
-          updates[`gamePresenters/${cityKey}/${gpKey}`] = {
-            name, barcode: idCard, city: cityName, studio: studioName,
-          };
+          updates[`gamePresenters/${cityKey}/${gpKey}`] = { name, barcode: idCard, city: cityName, studio: studioName };
           added++;
         }
       }
 
-      if (Object.keys(updates).length > 0) {
-        await update(ref(db), updates);
-      }
+      if (Object.keys(updates).length > 0) await update(ref(db), updates);
 
       setResult({ added, skipped: skipped.length, skippedRows: skipped });
 
@@ -233,7 +213,6 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
         ]);
       }
 
-      // Reset file input
       if (fileRef.current) fileRef.current.value = '';
       setFile(null);
       setParsedRows([]);
@@ -250,23 +229,27 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
     <div className="import-content">
       <h3>Import Data</h3>
 
-      <div className="import-type-selector">
-        <button className={`import-type-btn ${importType === 'inventory' ? 'active' : ''}`}
-          onClick={() => { setImportType('inventory'); setFile(null); setParsedRows([]); setResult(null); if (fileRef.current) fileRef.current.value = ''; }}>
-          <span className="import-type-icon">📦</span>
-          <div>
-            <strong>Inventory Items</strong>
-            <small>ITEM, SIZE, BARCODE, STATUS, City, Studio</small>
-          </div>
-        </button>
-        <button className={`import-type-btn ${importType === 'gp' ? 'active' : ''}`}
-          onClick={() => { setImportType('gp'); setFile(null); setParsedRows([]); setResult(null); if (fileRef.current) fileRef.current.value = ''; }}>
-          <span className="import-type-icon">🪪</span>
-          <div>
-            <strong>Game Presenters</strong>
-            <small>Dealer, ID card</small>
-          </div>
-        </button>
+      <div className="import-type-selector tabs modern-tabs">
+        {[
+          { id: 'inventory', label: 'Inventory Items', icon: '📦' },
+          { id: 'gp', label: 'Game Presenters', icon: '🪪' },
+        ].map(tab => {
+          const isActive = importType === tab.id;
+          return (
+            <button
+              key={tab.id}
+              className={`import-type-btn modern-tab ${isActive ? 'active' : ''}`}
+              onClick={() => { setImportType(tab.id as any); setFile(null); setParsedRows([]); setResult(null); if (fileRef.current) fileRef.current.value = ''; }}
+              type="button"
+            >
+              <span className="import-type-icon">{tab.icon}</span>
+              <div>
+                <strong>{tab.label}</strong>
+                <small>{tab.id === 'inventory' ? 'ITEM, SIZE, BARCODE, STATUS, City, Studio' : 'Dealer, ID card'}</small>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       <div className="format-hint">
@@ -286,13 +269,10 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
 
       <div className="form-group">
         <label className="field-label">Select CSV File</label>
-        <input type="file" accept=".csv,.txt" onChange={handleFileChange}
-          className="file-input" ref={fileRef} />
+        <input type="file" accept=".csv,.txt" onChange={handleFileChange} className="file-input" ref={fileRef} />
       </div>
 
-      {parsedRows.length > 0 && (
-        <PreviewTable headers={parsedHeaders} rows={parsedRows} errors={parseErrors} />
-      )}
+      {parsedRows.length > 0 && <PreviewTable headers={parsedHeaders} rows={parsedRows} errors={parseErrors} />}
 
       {result && (
         <div className={`import-result ${result.skipped > 0 ? 'partial' : 'success'}`}>
@@ -308,13 +288,10 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
 
       {file && parsedRows.length > 0 && (
         <div className="button-group">
-          <button onClick={handleImport}
-            disabled={loading || parseErrors.length > 0}
-            className="btn btn-gold">
+          <button onClick={handleImport} disabled={loading || parseErrors.length > 0} className="btn btn-gold">
             {loading ? 'Importing...' : `Import ${parsedRows.length} Rows`}
           </button>
-          <button onClick={() => { setFile(null); setParsedRows([]); setResult(null); if (fileRef.current) fileRef.current.value = ''; }}
-            className="btn btn-dark">
+          <button onClick={() => { setFile(null); setParsedRows([]); setResult(null); if (fileRef.current) fileRef.current.value = ''; }} className="btn btn-dark">
             Clear
           </button>
         </div>
@@ -325,19 +302,35 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
 
 // ─── EXPORT PANEL ─────────────────────────────────────────────────────────────
 
-function ExportPanel({ cityName, studioName, inventory, assignments, laundryOrders, logs, gamePresenters }: {
-  cityName: string; studioName: string;
+function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, laundryOrders, gamePresenters }: {
+  cityKey: string;
+  cityName: string;
+  studioName: string;
   inventory: Record<string, UniformItem>;
   assignments: Record<string, Assignment>;
   laundryOrders: Record<string, LaundryOrder>;
-  logs: Record<string, LogEntry>;
   gamePresenters: Record<string, GamePresenter>;
 }) {
+  const today = toDateInput(new Date());
   const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateTo, setDateTo] = useState(today); // default end = today
   const [statusFilter, setStatusFilter] = useState('all');
+  const [logLoading, setLogLoading] = useState(false);
 
-  const dateSuffix = `${cityName}_${studioName}_${new Date().toISOString().split('T')[0]}`;
+  const dateSuffix = `${cityName}_${studioName}_${today}`;
+
+  // ── Preset helpers ────────────────────────────────────────────────────────
+  const applyPreset = (days: number | 'today') => {
+    const end = new Date();
+    const start = new Date();
+    if (days === 'today') {
+      setDateFrom(toDateInput(end));
+    } else {
+      start.setDate(start.getDate() - days);
+      setDateFrom(toDateInput(start));
+    }
+    setDateTo(toDateInput(end));
+  };
 
   const filterByDate = <T extends { issuedAt?: string; date?: string }>(items: T[]) => {
     return items.filter(item => {
@@ -348,10 +341,10 @@ function ExportPanel({ cityName, studioName, inventory, assignments, laundryOrde
     });
   };
 
+  // ── Export functions ──────────────────────────────────────────────────────
   const exportInventory = () => {
     let items = Object.values(inventory);
     if (statusFilter !== 'all') items = items.filter(i => i.status === statusFilter);
-
     downloadCSV(`inventory_${dateSuffix}.csv`, [
       ['Name', 'Size', 'Barcode', 'Status', 'Category', 'Studio Location', 'Issued At', 'Issued At Studio', 'Issued By', 'Returned At', 'Returned At Studio'],
       ...items.map(i => [
@@ -365,13 +358,32 @@ function ExportPanel({ cityName, studioName, inventory, assignments, laundryOrde
   const exportIssuedItems = () => {
     const issued = Object.values(assignments);
     const filtered = dateFrom || dateTo ? filterByDate(issued) : issued;
-
     downloadCSV(`issued_items_${dateSuffix}.csv`, [
-      ['GP Name', 'GP ID Card', 'Item Name', 'Size', 'Item Barcode', 'Issued At', 'Issued At Studio', 'Issue Reason', 'Returned At', 'Returned At Studio', 'Status'],
+      ['GP Name', 'GP ID Card', 'Item Name', 'Size', 'Item Barcode', 'Issued At', 'Issued At Studio', 'Issue Reason', 'Issued By', 'Returned At', 'Returned At Studio', 'Returned By', 'Status'],
       ...filtered.map(a => [
         a.gpName, a.gpBarcode || '', a.itemName, a.itemSize, a.itemBarcode,
         a.issuedAt, a.issuedAtStudio, (a as any).issueReason || '',
-        a.returnedAt || '', a.returnedAtStudio || '', a.status,
+        (a as any).issuedBy || '',
+        a.returnedAt || '', a.returnedAtStudio || '',
+        (a as any).returnedBy || '', a.status,
+      ]),
+    ]);
+  };
+
+  const exportLoaners = () => {
+    const loaners = Object.values(assignments).filter(a => (a as any).issueReason === 'loaner');
+    const filtered = dateFrom || dateTo ? filterByDate(loaners) : loaners;
+    const loanerReasonLabel = (r: string) =>
+      r === 'forgot' ? 'Forgot Uniform' : r === 'pit_change' ? 'Pit Was Changed' : r || '';
+
+    downloadCSV(`loaners_${dateSuffix}.csv`, [
+      ['GP Name', 'GP ID Card', 'Item Name', 'Size', 'Item Barcode', 'Issued At', 'Studio', 'Loaner Reason', 'Issued By', 'Status', 'Returned At', 'Returned By'],
+      ...filtered.map(a => [
+        a.gpName, a.gpBarcode || '', a.itemName, a.itemSize, a.itemBarcode,
+        a.issuedAt, a.studio || '', loanerReasonLabel((a as any).loanerReason || ''),
+        (a as any).issuedBy || '',
+        a.status, a.returnedAt || '',
+        (a as any).returnedBy || '',
       ]),
     ]);
   };
@@ -385,23 +397,54 @@ function ExportPanel({ cityName, studioName, inventory, assignments, laundryOrde
 
   const exportLaundry = () => {
     downloadCSV(`laundry_orders_${dateSuffix}.csv`, [
-      ['Order Number', 'Created At', 'Picked Up At', 'Returned At', 'Status', 'Item Count', 'Barcodes'],
+      ['Order Number', 'Created At', 'Created By', 'Picked Up At', 'Returned At', 'Status', 'Item Count', 'Barcodes'],
       ...Object.values(laundryOrders).map(o => [
-        o.orderNumber, o.createdAt, o.pickedUpAt || '', o.returnedAt || '',
+        o.orderNumber, o.createdAt, (o as any).createdBy || '',
+        o.pickedUpAt || '', o.returnedAt || '',
         o.status, String(o.itemCount), (o.items || []).join('; '),
       ]),
     ]);
   };
 
-  const exportLogs = () => {
-    let entries = Object.values(logs);
-    if (dateFrom || dateTo) entries = filterByDate(entries as any);
+  // Activity log: fetch ALL studios for this city directly from Firebase
+  const exportLogs = async () => {
+    setLogLoading(true);
+    try {
+      const snap = await get(ref(db, `logs/${cityKey}`));
+      const cityLogs = snap.val() || {};
 
-    downloadCSV(`activity_logs_${dateSuffix}.csv`, [
-      ['Date', 'Action', 'Details'],
-      ...entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .map(l => [l.date, l.action, l.details]),
-    ]);
+      // Flatten: logs/${cityKey}/${studioKey}/${logKey} → LogEntry
+      const allEntries: Array<{ date: string; action: string; details: string; studio?: string }> = [];
+      for (const [studioKey, studioDB] of Object.entries(cityLogs)) {
+        if (typeof studioDB !== 'object' || !studioDB) continue;
+        for (const entry of Object.values(studioDB as Record<string, any>)) {
+          if (entry && entry.date) {
+            allEntries.push({ ...entry, studio: studioKey });
+          }
+        }
+      }
+
+      let filtered = allEntries;
+      if (dateFrom || dateTo) {
+        filtered = allEntries.filter(e => {
+          const d = new Date(e.date);
+          if (dateFrom && d < new Date(dateFrom)) return false;
+          if (dateTo && d > new Date(dateTo + 'T23:59:59')) return false;
+          return true;
+        });
+      }
+
+      filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      downloadCSV(`activity_logs_${dateSuffix}.csv`, [
+        ['Date', 'Action', 'Details', 'Studio', 'User'],
+        ...filtered.map(l => [l.date, l.action, l.details, l.studio || '', (l as any).user || '']),
+      ]);
+    } catch (err) {
+      console.error('Log export failed', err);
+    } finally {
+      setLogLoading(false);
+    }
   };
 
   const exportCards = [
@@ -422,6 +465,10 @@ function ExportPanel({ cityName, studioName, inventory, assignments, laundryOrde
       action: exportIssuedItems, extra: null,
     },
     {
+      icon: '🔄', title: 'Loaners', desc: 'Active and past loaners with reason (Forgot / Pit Changed)',
+      action: exportLoaners, extra: null,
+    },
+    {
       icon: '🪪', title: 'Game Presenters', desc: 'Full GP list with ID cards',
       action: exportGPs, extra: null,
     },
@@ -430,8 +477,8 @@ function ExportPanel({ cityName, studioName, inventory, assignments, laundryOrde
       action: exportLaundry, extra: null,
     },
     {
-      icon: '📜', title: 'Activity Log', desc: 'All system events and operations',
-      action: exportLogs, extra: null,
+      icon: '📜', title: 'Activity Log', desc: 'All system events across all studios in this city',
+      action: exportLogs, loading: logLoading,
     },
   ];
 
@@ -439,15 +486,35 @@ function ExportPanel({ cityName, studioName, inventory, assignments, laundryOrde
     <div className="export-content">
       <h3>Export Data</h3>
 
-      <div className="date-range-group">
-        <div className="form-group">
-          <label className="field-label">From Date</label>
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="input-dark" />
+      {/* Date range + presets */}
+      <div className="export-date-section">
+        <div className="date-preset-row">
+          <span className="field-label" style={{ marginBottom: 0 }}>Quick range:</span>
+          <button className="btn-preset" onClick={() => applyPreset('today')}>Today</button>
+          <button className="btn-preset" onClick={() => applyPreset(7)}>Last 7 Days</button>
+          <button className="btn-preset" onClick={() => applyPreset(30)}>Last 30 Days</button>
+          {(dateFrom || dateTo !== today) && (
+            <button className="btn-preset btn-preset-clear" onClick={() => { setDateFrom(''); setDateTo(today); }}>
+              ✕ Clear
+            </button>
+          )}
         </div>
-        <div className="form-group">
-          <label className="field-label">To Date</label>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="input-dark" />
+        <div className="date-range-group">
+          <div className="form-group">
+            <label className="field-label">From Date</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="input-dark" />
+          </div>
+          <div className="form-group">
+            <label className="field-label">To Date</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="input-dark" />
+          </div>
         </div>
+        {(dateFrom || dateTo) && (
+          <p className="export-date-hint">
+            Filtering: {dateFrom || 'all time'} → {dateTo || 'today'}
+            {' '}(applies to Issue History, Loaners, and Activity Log)
+          </p>
+        )}
       </div>
 
       <div className="export-cards">
@@ -461,8 +528,12 @@ function ExportPanel({ cityName, studioName, inventory, assignments, laundryOrde
                 {card.extra && <div className="export-card-extra">{card.extra}</div>}
               </div>
             </div>
-            <button onClick={card.action} className="btn btn-outline">
-              ↓ CSV
+            <button
+              onClick={card.action}
+              className="btn btn-dark"
+              disabled={(card as any).loading}
+            >
+              {(card as any).loading ? '…' : '↓ CSV'}
             </button>
           </div>
         ))}
@@ -473,20 +544,32 @@ function ExportPanel({ cityName, studioName, inventory, assignments, laundryOrde
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-export function ImportExport({ cityKey, cityName, studioKey, studioName, inventory, assignments, laundryOrders, logs, gamePresenters }: ImportExportProps) {
+export function ImportExport({ cityKey, cityName, studioKey, studioName, inventory, assignments, laundryOrders, gamePresenters }: ImportExportProps) {
   const [activeTab, setActiveTab] = useState<'import' | 'export'>('import');
 
   return (
     <div className="import-export-container card">
       <h2 className="text-accent">Import / Export</h2>
 
-      <div className="ie-tabs">
-        <button className={`ie-tab ${activeTab === 'import' ? 'active' : ''}`} onClick={() => setActiveTab('import')}>
-          ↑ Import
-        </button>
-        <button className={`ie-tab ${activeTab === 'export' ? 'active' : ''}`} onClick={() => setActiveTab('export')}>
-          ↓ Export
-        </button>
+      <div className="ie-tabs tabs modern-tabs">
+        {[
+          { id: 'import', label: 'Import', icon: UploadCloud },
+          { id: 'export', label: 'Export', icon: DownloadCloud },
+        ].map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              className={`ie-tab tab modern-tab ${isActive ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id as any)}
+              type="button"
+            >
+              <Icon size={16} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="tab-content">
@@ -495,8 +578,15 @@ export function ImportExport({ cityKey, cityName, studioKey, studioName, invento
             inventory={inventory} gamePresenters={gamePresenters} />
         )}
         {activeTab === 'export' && (
-          <ExportPanel cityName={cityName} studioName={studioName} inventory={inventory}
-            assignments={assignments} laundryOrders={laundryOrders} logs={logs} gamePresenters={gamePresenters} />
+          <ExportPanel
+            cityKey={cityKey}
+            cityName={cityName}
+            studioName={studioName}
+            inventory={inventory}
+            assignments={assignments}
+            laundryOrders={laundryOrders}
+            gamePresenters={gamePresenters}
+          />
         )}
       </div>
     </div>
@@ -504,4 +594,3 @@ export function ImportExport({ cityKey, cityName, studioKey, studioName, invento
 }
 
 export default ImportExport;
-
