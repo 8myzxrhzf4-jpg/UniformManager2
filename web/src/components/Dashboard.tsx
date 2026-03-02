@@ -63,6 +63,8 @@ export function Dashboard({ user }: DashboardProps) {
     if (auto) setSelectedStudio(auto[0]);
   }, [selectedCity, cities]);
 
+  const displayName: string = userRecord?.displayName || user.displayName || user.email || user.uid || 'Unknown User';
+
   const role = userRecord?.role;
   const assignedCities = userRecord?.assignedCities || [];
   const hasFullAdmin = isFullAdmin(role);
@@ -307,18 +309,18 @@ export function Dashboard({ user }: DashboardProps) {
                     <Operations cityKey={selectedCity} cityName={cities[selectedCity].name}
                       studioKey={selectedStudio || ''} studioName={selectedStudioInfo?.name || ''}
                       inventory={inventory} gps={gps} studios={cities[selectedCity].studios || {}}
-                      laundryEnabled={laundryEnabled} onRefresh={() => {}} />
+                      laundryEnabled={laundryEnabled} onRefresh={() => {}} currentUser={displayName} />
                   )}
 
                   {activeView === 'loaners' && (
-                    <ActiveLoaners assignments={assignments} inventory={inventory} studioName={selectedStudioInfo?.name} cityKey={selectedCity} cityName={cities[selectedCity]?.name} laundryEnabled={laundryEnabled} />
+                    <ActiveLoaners assignments={assignments} inventory={inventory} studioName={selectedStudioInfo?.name} cityKey={selectedCity} cityName={cities[selectedCity]?.name} laundryEnabled={laundryEnabled} currentUser={displayName} />
                   )}
 
                   {activeView === 'import-export' && (
                     <ImportExport cityKey={selectedCity} cityName={cities[selectedCity].name}
                       studioKey={selectedStudio || ''} studioName={selectedStudioInfo?.name || ''}
                       inventory={inventory} assignments={assignments} laundryOrders={laundryOrders}
-                      logs={logs} gamePresenters={gps} />
+                      logs={logs} gamePresenters={gps} currentUser={displayName} />
                   )}
 
                   {activeView === 'analytics' && (

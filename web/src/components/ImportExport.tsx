@@ -15,6 +15,7 @@ interface ImportExportProps {
   laundryOrders: Record<string, LaundryOrder>;
   logs: Record<string, LogEntry>;
   gamePresenters: Record<string, GamePresenter>;
+  currentUser?: string;
 }
 
 type ImportType = 'inventory' | 'gp';
@@ -98,10 +99,11 @@ function PreviewTable({ headers, rows, errors }: { headers: string[]; rows: Reco
 
 // ─── IMPORT PANEL ─────────────────────────────────────────────────────────────
 
-function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, gamePresenters }: {
+function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, gamePresenters, currentUser }: {
   cityKey: string; cityName: string; studioKey: string; studioName: string;
   inventory: Record<string, UniformItem>;
   gamePresenters: Record<string, GamePresenter>;
+  currentUser?: string;
 }) {
   const [importType, setImportType] = useState<ImportType>('inventory');
   const [file, setFile] = useState<File | null>(null);
@@ -176,7 +178,7 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
         if (added > 0) {
           const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
           updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
-            date: new Date().toISOString(), action: 'IMPORT',
+            date: new Date().toISOString(), action: 'IMPORT', user: currentUser || 'Unknown User',
             details: `Imported ${added} inventory item(s) to ${cityName}`,
           };
         }
@@ -302,14 +304,13 @@ function ImportPanel({ cityKey, cityName, studioKey, studioName, inventory, game
 
 // ─── EXPORT PANEL ─────────────────────────────────────────────────────────────
 
-function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, laundryOrders, gamePresenters }: {
+function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, laundryOrders }: {
   cityKey: string;
   cityName: string;
   studioName: string;
   inventory: Record<string, UniformItem>;
   assignments: Record<string, Assignment>;
   laundryOrders: Record<string, LaundryOrder>;
-  gamePresenters: Record<string, GamePresenter>;
 }) {
   const today = toDateInput(new Date());
   const [dateFrom, setDateFrom] = useState('');
@@ -388,13 +389,6 @@ function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, la
     ]);
   };
 
-  const exportGPs = () => {
-    downloadCSV(`game_presenters_${dateSuffix}.csv`, [
-      ['Name', 'ID Card', 'City', 'Studio'],
-      ...Object.values(gamePresenters).map(gp => [gp.name, gp.barcode || '', gp.city || '', gp.studio || '']),
-    ]);
-  };
-
   const exportLaundry = () => {
     downloadCSV(`laundry_orders_${dateSuffix}.csv`, [
       ['Order Number', 'Created At', 'Created By', 'Picked Up At', 'Returned At', 'Status', 'Item Count', 'Barcodes'],
@@ -469,10 +463,6 @@ function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, la
       action: exportLoaners, extra: null,
     },
     {
-      icon: '🪪', title: 'Game Presenters', desc: 'Full GP list with ID cards',
-      action: exportGPs, extra: null,
-    },
-    {
       icon: '🧺', title: 'Laundry Orders', desc: 'All laundry pickups and returns',
       action: exportLaundry, extra: null,
     },
@@ -544,7 +534,7 @@ function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, la
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-export function ImportExport({ cityKey, cityName, studioKey, studioName, inventory, assignments, laundryOrders, gamePresenters }: ImportExportProps) {
+export function ImportExport({ cityKey, cityName, studioKey, studioName, inventory, assignments, laundryOrders, gamePresenters, currentUser }: ImportExportProps) {
   const [activeTab, setActiveTab] = useState<'import' | 'export'>('import');
 
   return (
@@ -575,7 +565,7 @@ export function ImportExport({ cityKey, cityName, studioKey, studioName, invento
       <div className="tab-content">
         {activeTab === 'import' && (
           <ImportPanel cityKey={cityKey} cityName={cityName} studioKey={studioKey} studioName={studioName}
-            inventory={inventory} gamePresenters={gamePresenters} />
+            inventory={inventory} gamePresenters={gamePresenters} currentUser={currentUser} />
         )}
         {activeTab === 'export' && (
           <ExportPanel
@@ -585,7 +575,6 @@ export function ImportExport({ cityKey, cityName, studioKey, studioName, invento
             inventory={inventory}
             assignments={assignments}
             laundryOrders={laundryOrders}
-            gamePresenters={gamePresenters}
           />
         )}
       </div>
