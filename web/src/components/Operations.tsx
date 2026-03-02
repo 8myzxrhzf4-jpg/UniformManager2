@@ -700,7 +700,7 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
           updates[`inventory/${cityKey}/${itemKey}/status`] = newStatus;
           updates[`inventory/${cityKey}/${itemKey}/returnedAt`] = timestamp;
           updates[`inventory/${cityKey}/${itemKey}/returnedAtStudio`] = targetStudioKey;
-          updates[`inventory/${cityKey}/${itemKey}/returnedBy`] = resolvedGP?.barcode || currentUser || 'Unknown User';
+          updates[`inventory/${cityKey}/${itemKey}/returnedBy`] = currentUser || 'Unknown User';
           updates[`inventory/${cityKey}/${itemKey}/studioLocation`] = targetStudioName;
           if (laundryEnabled) {
             hamperIncrement++;
@@ -715,7 +715,7 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
           updates[`damages/${cityKey}/${damageKey}`] = {
             itemBarcode: item.barcode, itemName: item.name, damageType: 'damaged',
             reportedAt: timestamp, notes: 'Returned as unwearable',
-            city: cityName, studio: targetStudioName, returnedBy: resolvedGP?.barcode || currentUser || 'Unknown User',
+            city: cityName, studio: targetStudioName, returnedBy: currentUser || 'Unknown User',
           };
         }
 
@@ -726,7 +726,7 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
           if (a.itemBarcode === item.barcode && a.status === 'active') {
             updates[`assignments/${cityKey}/${aKey}/returnedAt`] = timestamp;
             updates[`assignments/${cityKey}/${aKey}/returnedAtStudio`] = targetStudioKey;
-            updates[`assignments/${cityKey}/${aKey}/returnedBy`] = resolvedGP?.barcode || currentUser || 'Unknown User';
+            updates[`assignments/${cityKey}/${aKey}/returnedBy`] = currentUser || 'Unknown User';
             updates[`assignments/${cityKey}/${aKey}/status`] = 'returned';
           }
         }
