@@ -53,6 +53,7 @@ export interface UniformItem {
   returnedAtStudio?: string;
   returnedBy?: string;
   returnedAt?: string;
+  batchDate?: string;
 }
 
 export interface LogEntry {

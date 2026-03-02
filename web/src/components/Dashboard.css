@@ -271,6 +271,36 @@
   border: 1px solid #a78bfa;
 }
 
+/* ─── INVENTORY FILTERS ────────────────────────────────────────────────────── */
+
+.inv-filters {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.inv-filter-input {
+  padding: 0.4rem 0.65rem !important;
+  font-size: 0.82rem !important;
+  flex: 1;
+  min-width: 120px;
+}
+
+.issued-to-label {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 0.15rem;
+}
+
+.empty-filter-row {
+  text-align: center;
+  padding: 1rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+  font-size: 0.875rem;
+}
+
 /* ─── LOGS ──────────────────────────────────────────────────────────────────── */
 
 .logs-list {
