@@ -81,7 +81,7 @@
   margin-top: 0.5rem;
 }
 
-/* Pending screen */
+/* ── Pending screen ── */
 .auth-pending {
   text-align: center;
   padding: 1rem 0;
@@ -102,3 +102,27 @@
   line-height: 1.6;
   margin-bottom: 1.5rem;
 }
+
+/* ── Password reset screen ── */
+.auth-reset {
+  padding: 0.25rem 0;
+}
+
+.reset-title {
+  color: var(--color-accent);
+  margin: 0 0 0.5rem 0;
+  font-size: 1.15rem;
+}
+
+/* ── btn-link utility ── */
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-size: inherit;
+  transition: color var(--transition-fast);
+}
+.btn-link:hover { color: var(--color-accent) !important; }

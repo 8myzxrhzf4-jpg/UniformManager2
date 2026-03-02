@@ -1,203 +1,266 @@
-import { useState, useRef } from 'react';
-import { ref, get } from 'firebase/database';
-import { db } from '../firebase';
-import type { UniformItem, GamePresenter, Assignment } from '../types';
+import { useState, useMemo, useRef } from 'react';
+import type { GamePresenter, Assignment, City } from '../types';
 import './GPLookup.css';
 
 interface GPLookupProps {
-  cityKey: string;
-  cityName: string;
-  inventory: Record<string, UniformItem>;
   gps: Record<string, GamePresenter>;
+  allAssignments: Record<string, Record<string, Assignment>>;
+  cities: Record<string, City>;
+  cityKey?: string;     // when set, scopes search to this city only
+  onBack?: () => void;  // back button callback
 }
 
-interface LookupResult {
-  gp: GamePresenter & { key: string };
-  activeAssignments: (Assignment & { key: string })[];
-  issuedItems: (UniformItem & { key: string })[];
+interface GPResult {
+  name: string;
+  barcode?: string;
+  history: (Assignment & { key: string; cityKey: string })[];
 }
 
-export function GPLookup({ cityKey, cityName, inventory, gps }: GPLookupProps) {
+export function GPLookup({ gps, allAssignments, cities, cityKey, onBack }: GPLookupProps) {
   const [query, setQuery] = useState('');
-  const [result, setResult] = useState<LookupResult | null>(null);
-  const [notFound, setNotFound] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [selectedGP, setSelectedGP] = useState<GPResult | null>(null);
+  const [filter, setFilter] = useState<'all' | 'active' | 'returned'>('all');
+  const [showDropdown, setShowDropdown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleLookup = async (searchQuery?: string) => {
-    const q = (searchQuery ?? query).trim();
-    if (!q) return;
+  const cityName = cityKey ? cities[cityKey]?.name : undefined;
 
-    setLoading(true);
-    setResult(null);
-    setNotFound(false);
-
-    try {
-      // Find GP by barcode (ID card) or name
-      const gpEntry = Object.entries(gps).find(([_, gp]) =>
-        gp.barcode === q || gp.name.toLowerCase() === q.toLowerCase()
-      );
-
-      if (!gpEntry) {
-        setNotFound(true);
-        setLoading(false);
-        return;
+  // Flatten GPs — scoped to cityKey when provided
+  const allGPList = useMemo(() => {
+    const seen = new Map<string, GamePresenter & { key: string }>();
+    const add = (key: string, gp: any) => {
+      const gpName = gp?.name;
+      if (gpName && typeof gpName === 'string' && !seen.has(gpName.toLowerCase())) {
+        seen.set(gpName.toLowerCase(), { key, ...gp });
       }
-
-      const [gpKey, gp] = gpEntry;
-
-      // Get active assignments for this GP
-      const assignmentsSnapshot = await get(ref(db, `assignments/${cityKey}`));
-      const assignments = assignmentsSnapshot.val() || {};
-
-      const activeAssignments = Object.entries(assignments)
-        .filter(([_, a]: [string, any]) => a.gpBarcode === gp.barcode && a.status === 'active')
-        .map(([key, a]: [string, any]) => ({ key, ...a }));
-
-      // Find corresponding inventory items
-      const issuedItems = activeAssignments
-        .map(assignment => {
-          const itemEntry = Object.entries(inventory).find(([_, item]) => item.barcode === assignment.itemBarcode);
-          return itemEntry ? { key: itemEntry[0], ...itemEntry[1] } : null;
-        })
-        .filter(Boolean) as (UniformItem & { key: string })[];
-
-      setResult({ gp: { key: gpKey, ...gp }, activeAssignments, issuedItems });
-    } catch (err) {
-      console.error('GP lookup error:', err);
-    } finally {
-      setLoading(false);
+    };
+    if (cityKey) {
+      // Only look at GPs in the selected city
+      const cityGPs = (gps as any)[cityKey];
+      if (cityGPs && typeof cityGPs === 'object') {
+        Object.entries(cityGPs).forEach(([k, v]) => add(k, v));
+      }
+    } else {
+      Object.entries(gps).forEach(([k, v]: [string, any]) => {
+        if (v && typeof v === 'object') {
+          if ('name' in v) add(k, v);
+          else Object.entries(v).forEach(([subk, subv]) => add(subk, subv));
+        }
+      });
     }
+    return Array.from(seen.values())
+      .filter(gp => gp.name && typeof gp.name === 'string')
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [gps, cityKey]);
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return [];
+    const q = query.toLowerCase();
+    return allGPList
+      .filter(gp => (gp.name || '').toLowerCase().includes(q) || (gp.barcode || '').includes(q))
+      .slice(0, 8);
+  }, [query, allGPList]);
+
+  const lookupGP = (gp: GamePresenter & { key: string }) => {
+    const history: (Assignment & { key: string; cityKey: string })[] = [];
+    // Scope assignment search to cityKey if provided
+    const scope = cityKey
+      ? { [cityKey]: allAssignments[cityKey] || {} }
+      : allAssignments;
+    Object.entries(scope).forEach(([ck, cityAssignments]) => {
+      Object.entries(cityAssignments || {}).forEach(([aKey, a]) => {
+        const matchName = a.gpName?.toLowerCase() === (gp.name || '').toLowerCase();
+        const matchBarcode = gp.barcode && a.gpBarcode === gp.barcode;
+        if (matchName || matchBarcode) {
+          history.push({ ...a, key: aKey, cityKey: ck });
+        }
+      });
+    });
+    history.sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
+    setSelectedGP({ name: gp.name, barcode: gp.barcode, history });
+    setQuery(gp.name);
+    setShowDropdown(false);
   };
 
+  const visibleHistory = useMemo(() => {
+    if (!selectedGP) return [];
+    if (filter === 'active') return selectedGP.history.filter(a => a.status === 'active');
+    if (filter === 'returned') return selectedGP.history.filter(a => a.status === 'returned');
+    return selectedGP.history;
+  }, [selectedGP, filter]);
+
+  const activeCount = selectedGP?.history.filter(a => a.status === 'active').length ?? 0;
+  const totalCount = selectedGP?.history.length ?? 0;
+
   const exportCSV = () => {
-    if (!result) return;
+    if (!selectedGP) return;
     const rows = [
-      ['GP Name', 'GP ID Card', 'Item', 'Size', 'Barcode', 'Issued At', 'Studio', 'Issue Reason', 'Status'],
-      ...result.activeAssignments.map(a => {
-        const item = result.issuedItems.find(i => i.barcode === a.itemBarcode);
-        return [
-          a.gpName, a.gpBarcode || '',
-          a.itemName, a.itemSize, a.itemBarcode,
-          a.issuedAt ? new Date(a.issuedAt).toLocaleString() : '',
-          a.studio || '',
-          a.issueReasonLabel || a.issueReason || '',
-          item?.status || 'Issued',
-        ];
-      }),
+      ['GP Name', 'GP ID', 'Item', 'Size', 'Barcode', 'Studio', 'City', 'Issued', 'Returned', 'Status'],
+      ...selectedGP.history.map(a => [
+        a.gpName, a.gpBarcode || '',
+        a.itemName, a.itemSize, a.itemBarcode,
+        a.studio || '', a.city || '',
+        a.issuedAt ? new Date(a.issuedAt).toLocaleDateString() : '',
+        a.returnedAt ? new Date(a.returnedAt).toLocaleDateString() : '',
+        a.status,
+      ]),
     ];
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `gp-lookup-${result.gp.barcode || result.gp.name}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `gp-lookup-${selectedGP.name.replace(/\s+/g, '-')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleClear = () => {
-    setQuery('');
-    setResult(null);
-    setNotFound(false);
-    inputRef.current?.focus();
-  };
-
   return (
-    <div className="gp-lookup-container card">
-      <h2 className="text-accent">GP Uniform Lookup</h2>
-      <p className="text-muted">Scan or enter a GP ID card to view their issued uniforms</p>
+    <div className="gp-lookup card">
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="btn btn-dark"
+            style={{ padding: '0.3rem 0.75rem', fontSize: '0.85rem' }}
+          >
+            ← Back
+          </button>
+        )}
+        <h2 className="text-accent" style={{ margin: 0 }}>🔍 GP Lookup</h2>
+        {cityName && (
+          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: 'auto' }}>
+            Scoped to {cityName}
+          </span>
+        )}
+      </div>
+      <p className="text-muted" style={{ marginBottom: '1.25rem', fontSize: '0.875rem' }}>
+        {cityKey
+          ? `Search Game Presenters in ${cityName || cityKey}.`
+          : 'Search for any Game Presenter across all cities to view their full assignment history.'}
+      </p>
 
-      <div className="lookup-search-row">
-        <input
-          ref={inputRef}
-          type="text"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') handleLookup(); }}
-          placeholder="Scan or enter GP ID card number or name"
-          className="input-dark lookup-input"
-          disabled={loading}
-          autoFocus
-        />
-        <button onClick={() => handleLookup()} disabled={loading || !query.trim()} className="btn btn-gold">
-          {loading ? 'Looking up...' : 'Look Up'}
-        </button>
-        {(result || notFound) && (
-          <button onClick={handleClear} className="btn btn-secondary">Clear</button>
+      <div className="gp-search-row">
+        <div style={{ flex: 1, position: 'relative' }}>
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={e => { setQuery(e.target.value); setSelectedGP(null); setShowDropdown(true); }}
+            onFocus={() => setShowDropdown(true)}
+            placeholder="Search GP name or ID card..."
+            className="input-dark gp-search-input"
+            autoFocus
+          />
+          {showDropdown && filtered.length > 0 && (
+            <div className="gp-suggestion-list">
+              {filtered.map(gp => (
+                <button key={gp.key} className="gp-suggestion-row" onClick={() => lookupGP(gp)}>
+                  <span className="gp-sug-name">{gp.name}</span>
+                  <span className="gp-sug-meta">
+                    {gp.barcode && <code>{gp.barcode}</code>}
+                    {gp.city && <span>{gp.city}</span>}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {selectedGP && (
+          <button className="btn btn-dark" onClick={() => { setSelectedGP(null); setQuery(''); inputRef.current?.focus(); }}>
+            Clear
+          </button>
         )}
       </div>
 
-      {notFound && (
-        <div className="alert alert-error">
-          No GP found with ID card or name "{query}". Check the ID and try again.
-        </div>
-      )}
-
-      {result && (
-        <div className="lookup-result">
-          <div className="gp-profile">
-            <div className="gp-profile-info">
-              <h3 className="gp-name">{result.gp.name}</h3>
-              <span className="gp-id">ID Card: {result.gp.barcode || 'N/A'}</span>
-              {result.gp.city && <span className="gp-city">{result.gp.city}</span>}
+      {selectedGP && (
+        <div className="gp-detail">
+          <div className="gp-detail-header">
+            <div>
+              <h3>{selectedGP.name}</h3>
+              {selectedGP.barcode && <code className="barcode small">{selectedGP.barcode}</code>}
             </div>
             <div className="gp-stats">
               <div className="gp-stat">
-                <span className="gp-stat-value">{result.activeAssignments.length}</span>
-                <span className="gp-stat-label">Items Issued</span>
+                <span className="gp-stat-num">{totalCount}</span>
+                <span className="gp-stat-label">Total Issues</span>
+              </div>
+              <div className="gp-stat">
+                <span className="gp-stat-num" style={{ color: activeCount > 0 ? 'var(--color-warning)' : 'var(--color-success)' }}>
+                  {activeCount}
+                </span>
+                <span className="gp-stat-label">Currently Out</span>
               </div>
             </div>
           </div>
 
-          {result.activeAssignments.length === 0 ? (
-            <div className="no-items-message">
-              <p className="text-muted">No uniforms currently issued to this GP.</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <div className="gp-filter-tabs">
+              {(['all', 'active', 'returned'] as const).map(f => (
+                <button key={f} className={`gp-filter-tab ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
+                  {f === 'all' ? 'All' : f === 'active' ? 'Active' : 'Returned'}
+                </button>
+              ))}
             </div>
+            {totalCount > 0 && (
+              <button className="btn btn-dark" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} onClick={exportCSV}>
+                Export CSV
+              </button>
+            )}
+          </div>
+
+          {visibleHistory.length === 0 ? (
+            <div className="empty-inline">No records found.</div>
           ) : (
-            <>
-              <div className="lookup-items-header">
-                <h4>Currently Issued Uniforms</h4>
-                <button onClick={exportCSV} className="btn btn-small btn-secondary">Export CSV</button>
-              </div>
-              <div className="lookup-items-list">
-                {result.activeAssignments.map(assignment => {
-                  const item = result.issuedItems.find(i => i.barcode === assignment.itemBarcode);
-                  const daysOut = assignment.issuedAt
-                    ? Math.floor((Date.now() - new Date(assignment.issuedAt).getTime()) / 86400000)
-                    : null;
-                  return (
-                    <div key={assignment.key} className="lookup-item-card">
-                      <div className="lookup-item-main">
-                        <span className="lookup-item-name">{assignment.itemName}</span>
-                        <span className="lookup-item-size">{assignment.itemSize}</span>
-                        <span className="lookup-item-barcode">{assignment.itemBarcode}</span>
-                      </div>
-                      <div className="lookup-item-meta">
-                        {assignment.issueReasonLabel && (
-                          <span className="lookup-reason-badge">{assignment.issueReasonLabel}</span>
-                        )}
-                        {assignment.studio && (
-                          <span className="lookup-studio">{assignment.studio}</span>
-                        )}
-                        {daysOut !== null && (
-                          <span className={`lookup-days ${daysOut >= 30 ? 'overdue' : ''}`}>
-                            {daysOut === 0 ? 'Issued today' : `${daysOut} day${daysOut !== 1 ? 's' : ''} ago`}
-                          </span>
-                        )}
-                        <span className={`status-badge status-${(item?.status || 'issued').toLowerCase().replace(/\s+/g, '-')}`}>
-                          {item?.status || 'Issued'}
+            <div className="assignment-table-wrap">
+              <table className="table-dark assignment-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Size</th>
+                    <th>Barcode</th>
+                    <th>Studio</th>
+                    <th>City</th>
+                    <th>Issued</th>
+                    <th>Returned</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleHistory.map(a => (
+                    <tr key={`${a.cityKey}-${a.key}`}>
+                      <td>{a.itemName}</td>
+                      <td>{a.itemSize}</td>
+                      <td><code className="barcode small">{a.itemBarcode}</code></td>
+                      <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{a.studio}</td>
+                      <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{a.city}</td>
+                      <td style={{ fontSize: '0.8rem' }}>{a.issuedAt ? new Date(a.issuedAt).toLocaleDateString() : '—'}</td>
+                      <td style={{ fontSize: '0.8rem' }}>{a.returnedAt ? new Date(a.returnedAt).toLocaleDateString() : '—'}</td>
+                      <td>
+                        <span className={`status-badge status-${a.status === 'active' ? 'issued' : 'available'}`}>
+                          {a.status === 'active' ? 'Out' : 'Returned'}
                         </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
+        </div>
+      )}
+
+      {!selectedGP && query.trim() && filtered.length === 0 && (
+        <div className="empty-inline" style={{ marginTop: '0.75rem' }}>
+          No GP found matching "{query}". Check the name or ID card number.
+        </div>
+      )}
+
+      {!query.trim() && (
+        <div className="empty-inline" style={{ marginTop: '0.75rem' }}>
+          Start typing to search for a Game Presenter.
         </div>
       )}
     </div>
   );
 }
-

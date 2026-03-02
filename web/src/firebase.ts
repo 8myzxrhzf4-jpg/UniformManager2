@@ -44,12 +44,22 @@ async function restGet(path = '') {
   return res.json();
 }
 
+// Extend Window so TypeScript knows about our custom properties
+declare global {
+  interface Window {
+    __firebaseAdapter: unknown;
+    __lastFetchedInventory?: unknown[];
+  }
+}
+
+type SnapCallback = (snap: { val: () => unknown }) => void;
+
 function makeRef(path = '') {
   const fullPath = path || '';
   return {
     path: fullPath,
-    child(subPath) { return makeRef(fullPath ? `${fullPath}/${subPath}` : subPath); },
-    async once(_event) {
+    child(subPath: string) { return makeRef(fullPath ? `${fullPath}/${subPath}` : subPath); },
+    async once(_event: string) {
       try {
         const snapshot = await dbGet(dbRef(db, fullPath));
         return { val: () => snapshot.val() };
@@ -58,7 +68,7 @@ function makeRef(path = '') {
         return { val: () => data };
       }
     },
-    on(event, callback) {
+    on(event: string, callback: SnapCallback) {
       if (event !== 'value') return () => {};
       try {
         const unsub = onValue(dbRef(db, fullPath), snapshot => {
@@ -66,7 +76,7 @@ function makeRef(path = '') {
         });
         if (typeof unsub === 'function') return unsub;
       } catch {}
-      let stopped = false, last = null;
+      let stopped = false, last: string | null = null;
       const poll = async () => {
         if (stopped) return;
         try {
@@ -82,9 +92,9 @@ function makeRef(path = '') {
     off() {},
     push() {
       const pushed = dbPush(dbRef(db, fullPath));
-      return { key: pushed.key, set: (value) => dbSet(pushed, value) };
+      return { key: pushed.key, set: (value: unknown) => dbSet(pushed, value) };
     },
-    async update(updates) { return dbUpdate(dbRef(db, fullPath), updates); },
+    async update(updates: Record<string, unknown>) { return dbUpdate(dbRef(db, fullPath), updates); },
     toString() { return `ref(${fullPath})`; },
   };
 }
@@ -92,9 +102,9 @@ function makeRef(path = '') {
 const adapter = {
   database() {
     return {
-      ref(path) {
+      ref(path: string = '') {
         const r = makeRef(path || '');
-        if (!path) { r.update = (updates) => dbUpdate(dbRef(db, ''), updates); }
+        if (!path) { r.update = (updates: Record<string, unknown>) => dbUpdate(dbRef(db, ''), updates); }
         return r;
       },
     };
@@ -103,11 +113,11 @@ const adapter = {
 
 if (typeof window !== 'undefined') {
   window.__firebaseAdapter = {
-    ref: (p) => makeRef(p || ''),
+    ref: (p: string) => makeRef(p || ''),
     restGet,
     _rawDb: db,
     _auth: auth,
-    signIn: (email, password) => signInWithEmailAndPassword(auth, email, password),
+    signIn: (email: string, password: string) => signInWithEmailAndPassword(auth, email, password),
     signOut: () => signOut(auth),
     currentUser: () => auth.currentUser,
   };

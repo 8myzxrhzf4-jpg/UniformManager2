@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { ref, update, push, get } from 'firebase/database';
 import { db } from '../firebase';
 import type { UniformItem, GamePresenter, Studio } from '../types';
@@ -21,50 +21,64 @@ interface OperationsProps {
   studioName: string;
   inventory: Record<string, UniformItem>;
   gps: Record<string, GamePresenter>;
+  assignments?: Record<string, any>;
   studios?: Record<string, Studio>;
   laundryEnabled?: boolean;
   onRefresh?: () => void;
 }
 
-export function Operations({ cityKey, cityName, studioKey, studioName, inventory, gps, studios = {}, laundryEnabled = true, onRefresh }: OperationsProps) {
+export function Operations({
+  cityKey, cityName, studioKey, studioName, inventory, gps,
+  assignments = {}, studios = {}, laundryEnabled = true, onRefresh,
+}: OperationsProps) {
   const [activeTab, setActiveTab] = useState<'issue' | 'return' | 'laundry' | 'damage'>('issue');
 
-  const tabs = [
-    { id: 'issue', label: 'Issue', icon: '📤' },
-    { id: 'return', label: 'Return', icon: '📥' },
-    ...(laundryEnabled ? [{ id: 'laundry', label: 'Laundry', icon: '🧺' }] : []),
+  const tabs: { id: 'issue' | 'return' | 'laundry' | 'damage'; label: string; icon: string }[] = [
+    { id: 'issue',  label: 'Issue',        icon: '📤' },
+    { id: 'return', label: 'Return',       icon: '📥' },
+    ...(laundryEnabled ? [{ id: 'laundry' as const, label: 'Laundry', icon: '🧺' }] : []),
     { id: 'damage', label: 'Damage / Lost', icon: '⚠️' },
-  ] as const;
+  ];
 
   return (
     <div className="operations-container card">
       <h2 className="text-accent">Operations</h2>
 
-      <div className="ops-tabs">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            className={`ops-tab ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            <span className="ops-tab-icon">{tab.icon}</span>
-            <span>{tab.label}</span>
-          </button>
-        ))}
+      <div className="ops-tabs tabs modern-tabs">
+        {tabs.map(tab => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              className={`ops-tab modern-tab ${isActive ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+              type="button"
+              aria-pressed={isActive}
+            >
+              <span className="ops-tab-icon">{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="tab-content">
         {activeTab === 'issue' && (
-          <IssueOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey} studioName={studioName} inventory={inventory} gps={gps} studios={studios} onRefresh={onRefresh} />
+          <IssueOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey}
+            studioName={studioName} inventory={inventory} gps={gps} studios={studios} onRefresh={onRefresh} />
         )}
         {activeTab === 'return' && (
-          <ReturnOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey} studioName={studioName} inventory={inventory} studios={studios} laundryEnabled={laundryEnabled} onRefresh={onRefresh} />
+          <ReturnOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey}
+            studioName={studioName} inventory={inventory} gps={gps} assignments={assignments} studios={studios}
+            laundryEnabled={laundryEnabled} onRefresh={onRefresh} />
         )}
         {activeTab === 'laundry' && laundryEnabled && (
-          <LaundryOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey} studioName={studioName} inventory={inventory} onRefresh={onRefresh} />
+          <LaundryOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey}
+            studioName={studioName} inventory={inventory} studios={studios} onRefresh={onRefresh} />
         )}
         {activeTab === 'damage' && (
-          <DamageOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey} studioName={studioName} inventory={inventory} onRefresh={onRefresh} />
+          <DamageOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey}
+            studioName={studioName} inventory={inventory} onRefresh={onRefresh} />
         )}
       </div>
     </div>
@@ -78,9 +92,7 @@ function StepIndicator({ steps, current }: { steps: string[]; current: number })
     <div className="step-indicator">
       {steps.map((label, i) => (
         <div key={i} className={`step ${i < current ? 'done' : i === current ? 'active' : 'pending'}`}>
-          <div className="step-circle">
-            {i < current ? '✓' : i + 1}
-          </div>
+          <div className="step-circle">{i < current ? '✓' : i + 1}</div>
           <span className="step-label">{label}</span>
           {i < steps.length - 1 && <div className="step-line" />}
         </div>
@@ -90,34 +102,16 @@ function StepIndicator({ steps, current }: { steps: string[]; current: number })
 }
 
 // ─── BARCODE INPUT ────────────────────────────────────────────────────────────
-// Works with USB scanners (which act as keyboard) and manual entry.
 
 function BarcodeInput({
-  label,
-  placeholder,
-  value,
-  onChange,
-  onSubmit,
-  disabled,
-  autoFocus,
-  hint,
+  label, placeholder, value, onChange, onSubmit, disabled, autoFocus, hint,
 }: {
-  label: string;
-  placeholder: string;
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit: () => void;
-  disabled?: boolean;
-  autoFocus?: boolean;
-  hint?: string;
+  label: string; placeholder: string; value: string;
+  onChange: (v: string) => void; onSubmit: () => void;
+  disabled?: boolean; autoFocus?: boolean; hint?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (autoFocus && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [autoFocus]);
+  useEffect(() => { if (autoFocus && inputRef.current) inputRef.current.focus(); }, [autoFocus]);
 
   return (
     <div className="barcode-input-group">
@@ -130,19 +124,13 @@ function BarcodeInput({
           type="text"
           value={value}
           onChange={e => onChange(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter') onSubmit();
-          }}
+          onKeyDown={e => { if (e.key === 'Enter') onSubmit(); }}
           placeholder={placeholder}
           className="input-dark barcode-field"
           disabled={disabled}
           autoFocus={autoFocus}
         />
-        <button
-          onClick={onSubmit}
-          disabled={disabled || !value.trim()}
-          className="btn btn-gold btn-scan"
-        >
+        <button onClick={onSubmit} disabled={disabled || !value.trim()} className="btn btn-gold btn-scan">
           Confirm
         </button>
       </div>
@@ -150,21 +138,21 @@ function BarcodeInput({
   );
 }
 
-// ─── ISSUE OPERATION ──────────────────────────────────────────────────────────
-
-type IssueStep = 'gp' | 'items' | 'reason' | 'confirm';
+// ─── SHARED INTERFACE ─────────────────────────────────────────────────────────
 
 interface OperationComponentProps {
-  cityKey: string;
-  cityName: string;
-  studioKey: string;
-  studioName: string;
+  cityKey: string; cityName: string; studioKey: string; studioName: string;
   inventory: Record<string, UniformItem>;
   gps?: Record<string, GamePresenter>;
+  assignments?: Record<string, any>;
   studios?: Record<string, Studio>;
   laundryEnabled?: boolean;
   onRefresh?: () => void;
 }
+
+// ─── ISSUE OPERATION ──────────────────────────────────────────────────────────
+
+type IssueStep = 'gp' | 'items' | 'reason' | 'loaner_reason' | 'confirm';
 
 function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, gps, studios = {}, onRefresh }: OperationComponentProps) {
   const [step, setStep] = useState<IssueStep>('gp');
@@ -176,25 +164,61 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
   const [itemBarcode, setItemBarcode] = useState('');
   const [selectedItems, setSelectedItems] = useState<Array<{ key: string; item: UniformItem }>>([]);
   const [issueReason, setIssueReason] = useState('');
+  const [loanerReason, setLoanerReason] = useState<'forgot' | 'pit_change' | ''>('');
   const [targetStudioKey, setTargetStudioKey] = useState(studioKey);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const studioList = Object.entries(studios).map(([key, s]) => ({ key, name: s.name }));
-  const gpList = gps ? Object.entries(gps).map(([key, gp]) => ({ key, ...gp })) : [];
+  const studioList = useMemo(() =>
+    Object.entries(studios)
+      .filter(([, s]) => s && s.name)
+      .map(([key, s]) => ({ key, name: s.name })),
+  [studios]);
 
-  const filteredGPs = gpSearch
-    ? gpList.filter(gp => gp.name.toLowerCase().includes(gpSearch.toLowerCase()) || (gp.barcode || '').includes(gpSearch))
-    : gpList;
+  // gps may be nested { cityKey: { gpId: {name,...} } } or flat { gpId: {name,...} }
+  // Flatten to a consistent list regardless of DB structure
+  const gpList = useMemo(() => {
+    if (!gps) return [];
+    const flat: Array<{ key: string; name: string; barcode: string }> = [];
+    const seen = new Set<string>();
+    const add = (key: string, gp: any) => {
+      const gpName = gp?.name;
+      if (gpName && typeof gpName === 'string' && !seen.has(key)) {
+        seen.add(key);
+        flat.push({ key, name: gpName, barcode: gp.barcode || '' });
+      }
+    };
+    Object.entries(gps).forEach(([k, v]: [string, any]) => {
+      if (v && typeof v === 'object') {
+        if (typeof v.name === 'string') {
+          add(k, v);               // flat: gpId → { name, barcode }
+        } else {
+          Object.entries(v).forEach(([subk, subv]) => add(subk, subv)); // nested: city → gp
+        }
+      }
+    });
+    return flat.sort((a, b) => a.name.localeCompare(b.name));
+  }, [gps]);
+
+  const filteredGPs = useMemo(() => {
+    const q = gpSearch.trim().toLowerCase();
+    if (!q) return gpList.slice(0, 8);
+    return gpList.filter(gp =>
+      gp.name.toLowerCase().includes(q) ||
+      gp.barcode.toLowerCase().includes(q)
+    ).slice(0, 8);
+  }, [gpList, gpSearch]);
 
   const handleGPLookup = () => {
-    const found = gpList.find(gp => gp.barcode === gpSearch.trim() || gp.name.toLowerCase() === gpSearch.trim().toLowerCase());
+    const q = gpSearch.trim().toLowerCase();
+    const found = gpList.find(
+      gp => gp.barcode === gpSearch.trim() || gp.name.toLowerCase() === q
+    );
     if (found) {
-      setSelectedGP({ name: found.name, barcode: found.barcode || '', key: found.key });
+      setSelectedGP({ name: found.name, barcode: found.barcode, key: found.key });
       setIsNewGP(false);
       setStep('items');
     } else if (gpSearch.trim()) {
-      // Not found — prompt to add
       setIsNewGP(true);
     }
   };
@@ -249,67 +273,54 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
 
         const assignmentKey = push(ref(db, `assignments/${cityKey}`)).key;
         updates[`assignments/${cityKey}/${assignmentKey}`] = {
-          itemBarcode: item.barcode,
-          itemName: item.name,
-          itemSize: item.size,
-          gpName: selectedGP.name,
-          gpBarcode: selectedGP.barcode,
-          issuedAt: timestamp,
-          issuedAtStudio: targetStudioKey,
-          issuedAtCity: cityKey,
-          issuedBy: CURRENT_USER,
-          issueReason,
-          status: 'active',
-          city: cityName,
-          studio: targetStudioName,
+          itemBarcode: item.barcode, itemName: item.name, itemSize: item.size,
+          gpName: selectedGP.name, gpBarcode: selectedGP.barcode,
+          issuedAt: timestamp, issuedAtStudio: targetStudioKey, issuedAtCity: cityKey,
+          issuedBy: CURRENT_USER, issueReason, status: 'active',
+          city: cityName, studio: targetStudioName,
+          ...(issueReason === 'loaner' && loanerReason ? { loanerReason } : {}),
         };
       }
 
-      // Save new GP if applicable
       if (!selectedGP.key) {
         const gpKey = push(ref(db, `gamePresenters/${cityKey}`)).key;
         updates[`gamePresenters/${cityKey}/${gpKey}`] = {
-          name: selectedGP.name,
-          barcode: selectedGP.barcode,
-          city: cityName,
-          studio: targetStudioName,
+          name: selectedGP.name, barcode: selectedGP.barcode,
+          city: cityName, studio: targetStudioName,
         };
       }
 
       const logKey = push(ref(db, `logs/${cityKey}/${targetStudioKey}`)).key;
       const reasonLabel = ISSUE_REASONS.find(r => r.value === issueReason)?.label || issueReason;
+      const loanerLabel = issueReason === 'loaner' && loanerReason
+        ? ` (${loanerReason === 'forgot' ? 'Forgot uniform' : 'Pit was changed'})`
+        : '';
       updates[`logs/${cityKey}/${targetStudioKey}/${logKey}`] = {
-        date: timestamp,
-        action: 'ISSUE',
-        details: `Issued ${selectedItems.length} item(s) to ${selectedGP.name} — Reason: ${reasonLabel} — Items: ${selectedItems.map(s => s.item.name).join(', ')}`,
+        date: timestamp, action: 'ISSUE',
+        details: `Issued ${selectedItems.length} item(s) to ${selectedGP.name} — Reason: ${reasonLabel}${loanerLabel} — Items: ${selectedItems.map(s => s.item.name).join(', ')}`,
       };
 
       await update(ref(db), updates);
       setMessage({ type: 'success', text: `✓ Issued ${selectedItems.length} item(s) to ${selectedGP.name}` });
 
-      // Reset
       setTimeout(() => {
-        setStep('gp');
-        setGpSearch('');
-        setSelectedGP(null);
-        setSelectedItems([]);
-        setIssueReason('');
-        setItemBarcode('');
-        setMessage(null);
+        setStep('gp'); setGpSearch(''); setSelectedGP(null);
+        setSelectedItems([]); setIssueReason(''); setLoanerReason(''); setItemBarcode(''); setMessage(null);
         if (onRefresh) onRefresh();
       }, 2000);
     } catch (err) {
       console.error(err);
       setMessage({ type: 'error', text: 'Failed to issue items. Please try again.' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
+
+  const stepIndex = ['gp', 'items', 'reason', 'loaner_reason', 'confirm'].indexOf(step) === 3
+    ? 2 // loaner_reason shows as step 3 (Reason)
+    : ['gp', 'items', 'reason', 'confirm'].indexOf(step === 'loaner_reason' ? 'reason' : step);
 
   return (
     <div className="operation-content">
-      <StepIndicator steps={['Identify GP', 'Scan Items', 'Reason', 'Confirm']} current={['gp','items','reason','confirm'].indexOf(step)} />
-
+      <StepIndicator steps={['Identify GP', 'Scan Items', 'Reason', 'Confirm']} current={stepIndex} />
       {message && <div className={`alert alert-${message.type}`}>{message.text}</div>}
 
       {/* STEP 1: GP */}
@@ -340,6 +351,17 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
                 </button>
               ))}
             </div>
+          )}
+
+          {/* Manual add button — always visible if search has text and no exact match */}
+          {gpSearch && !isNewGP && (
+            <button
+              className="btn btn-dark"
+              style={{ marginTop: '0.75rem', fontSize: '0.875rem' }}
+              onClick={() => { setIsNewGP(true); setNewGPName(gpSearch); setNewGPId(''); }}
+            >
+              + Add "{gpSearch}" as New GP
+            </button>
           )}
 
           {isNewGP && (
@@ -442,10 +464,52 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
           </div>
 
           <div className="button-row">
-            <button onClick={() => setStep('confirm')} disabled={!issueReason} className="btn btn-gold">
+            <button
+              onClick={() => setStep(issueReason === 'loaner' ? 'loaner_reason' : 'confirm')}
+              disabled={!issueReason}
+              className="btn btn-gold"
+            >
               Next — Review →
             </button>
             <button onClick={() => setStep('items')} className="btn btn-dark">← Back</button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 3b: LOANER REASON */}
+      {step === 'loaner_reason' && (
+        <div className="step-panel">
+          <h3 className="step-title">Loaner — Why?</h3>
+          <p className="text-muted">Select the reason for this loaner issue</p>
+
+          <div className="loaner-reason-grid">
+            <button
+              className={`loaner-reason-card ${loanerReason === 'forgot' ? 'selected' : ''}`}
+              onClick={() => setLoanerReason('forgot')}
+            >
+              <span className="loaner-reason-icon">😅</span>
+              <span className="loaner-reason-label">Forgot Uniform</span>
+              <span className="loaner-reason-sub">GP left their uniform at home</span>
+            </button>
+            <button
+              className={`loaner-reason-card ${loanerReason === 'pit_change' ? 'selected' : ''}`}
+              onClick={() => setLoanerReason('pit_change')}
+            >
+              <span className="loaner-reason-icon">🔁</span>
+              <span className="loaner-reason-label">Pit Was Changed</span>
+              <span className="loaner-reason-sub">GP moved to a different game</span>
+            </button>
+          </div>
+
+          <div className="button-row" style={{ marginTop: '1.5rem' }}>
+            <button
+              onClick={() => setStep('confirm')}
+              disabled={!loanerReason}
+              className="btn btn-gold"
+            >
+              Next — Review →
+            </button>
+            <button onClick={() => setStep('reason')} className="btn btn-dark">← Back</button>
           </div>
         </div>
       )}
@@ -466,7 +530,14 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
             </div>
             <div className="confirm-row">
               <span className="confirm-label">Reason</span>
-              <span className="confirm-value">{ISSUE_REASONS.find(r => r.value === issueReason)?.label}</span>
+              <span className="confirm-value">
+                {ISSUE_REASONS.find(r => r.value === issueReason)?.label}
+                {issueReason === 'loaner' && loanerReason && (
+                  <span className="confirm-subreason">
+                    — {loanerReason === 'forgot' ? '😅 Forgot Uniform' : '🔁 Pit Was Changed'}
+                  </span>
+                )}
+              </span>
             </div>
             <div className="confirm-row">
               <span className="confirm-label">Items ({selectedItems.length})</span>
@@ -495,45 +566,116 @@ function IssueOperation({ cityKey, cityName, studioKey, studioName, inventory, g
 
 // ─── RETURN OPERATION ─────────────────────────────────────────────────────────
 
+// ─── RETURN OPERATION ─────────────────────────────────────────────────────────
+
 type ReturnStep = 'gp' | 'items' | 'status';
 
-function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, studios = {}, laundryEnabled = true, onRefresh }: OperationComponentProps) {
+function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, gps, assignments = {}, studios = {}, laundryEnabled = true, onRefresh }: OperationComponentProps) {
   const [step, setStep] = useState<ReturnStep>('gp');
   const [gpSearch, setGpSearch] = useState('');
-  const [resolvedGP, setResolvedGP] = useState<string>('');
+  const [resolvedGP, setResolvedGP] = useState<{ name: string; barcode: string } | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [itemBarcode, setItemBarcode] = useState('');
   const [returnItems, setReturnItems] = useState<Array<{ key: string; item: UniformItem; disposition: 'cleaner' | 'unwearable' | null }>>([]);
   const [targetStudioKey, setTargetStudioKey] = useState(studioKey);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
 
-  const studioList = Object.entries(studios).map(([key, s]) => ({ key, name: s.name }));
+  const studioList = useMemo(() =>
+    Object.entries(studios).filter(([, s]) => s && s.name).map(([key, s]) => ({ key, name: s.name })),
+  [studios]);
+
+  // Flatten gps same as IssueOperation
+  const gpList = useMemo(() => {
+    if (!gps) return [];
+    const flat: Array<{ key: string; name: string; barcode: string }> = [];
+    const seen = new Set<string>();
+    const add = (key: string, gp: any) => {
+      const gpName = gp?.name;
+      if (gpName && typeof gpName === 'string' && !seen.has(key)) {
+        seen.add(key);
+        flat.push({ key, name: gpName, barcode: gp.barcode || '' });
+      }
+    };
+    Object.entries(gps).forEach(([k, v]: [string, any]) => {
+      if (v && typeof v === 'object') {
+        if (typeof v.name === 'string') { add(k, v); }
+        else { Object.entries(v).forEach(([subk, subv]) => add(subk, subv)); }
+      }
+    });
+    return flat.sort((a, b) => a.name.localeCompare(b.name));
+  }, [gps]);
+
+  const filteredReturnGPs = useMemo(() => {
+    const q = gpSearch.trim().toLowerCase();
+    if (!q) return gpList.slice(0, 8);
+    return gpList.filter(gp =>
+      gp.name.toLowerCase().includes(q) || gp.barcode.toLowerCase().includes(q)
+    ).slice(0, 8);
+  }, [gpList, gpSearch]);
+
+  // All items currently assigned (active) to the selected GP
+  const gpActiveItems = useMemo(() => {
+    if (!resolvedGP) return [];
+    const results: Array<{ key: string; item: UniformItem }> = [];
+    Object.entries(assignments).forEach(([, a]: [string, any]) => {
+      if (a.status !== 'active') return;
+      const nameMatch = resolvedGP.name && a.gpName?.toLowerCase() === resolvedGP.name.toLowerCase();
+      const barcodeMatch = resolvedGP.barcode && a.gpBarcode === resolvedGP.barcode;
+      if (!nameMatch && !barcodeMatch) return;
+      // Find the inventory item by barcode
+      const invEntry = Object.entries(inventory).find(([, item]) => item.barcode === a.itemBarcode);
+      if (invEntry) {
+        const [invKey, invItem] = invEntry;
+        if (invItem.status === 'Issued' && !results.find(r => r.key === invKey)) {
+          results.push({ key: invKey, item: invItem });
+        }
+      }
+    });
+    return results;
+  }, [resolvedGP, assignments, inventory]);
+
+  const selectGP = (gp: { name: string; barcode: string }) => {
+    setResolvedGP(gp);
+    setGpSearch(gp.name);
+    setShowSuggestions(false);
+    setStep('items');
+  };
 
   const handleGPLookup = () => {
     if (!gpSearch.trim()) return;
-    // GP lookup is optional for return — just record the ID for the log
-    setResolvedGP(gpSearch.trim());
-    setStep('items');
+    const q = gpSearch.trim().toLowerCase();
+    const found = gpList.find(gp => gp.barcode === gpSearch.trim() || gp.name.toLowerCase() === q);
+    if (found) {
+      selectGP({ name: found.name, barcode: found.barcode });
+    } else {
+      setResolvedGP({ name: gpSearch.trim(), barcode: gpSearch.trim() });
+      setShowSuggestions(false);
+      setStep('items');
+    }
   };
 
   const handleAddReturnItem = () => {
     if (!itemBarcode.trim()) return;
-    const entry = Object.entries(inventory).find(([_, item]) => item.barcode === itemBarcode.trim());
-    if (!entry) {
-      setMessage({ type: 'error', text: `Barcode "${itemBarcode}" not found` });
-      return;
-    }
+    const entry = Object.entries(inventory).find(([, item]) => item.barcode === itemBarcode.trim());
+    if (!entry) { setMessage({ type: 'error', text: `Barcode "${itemBarcode}" not found` }); return; }
     const [key, item] = entry;
     if (item.status !== 'Issued') {
-      setMessage({ type: 'error', text: `Item "${item.name}" is not Issued (status: ${item.status})` });
-      return;
+      setMessage({ type: 'error', text: `"${item.name}" is not currently Issued (status: ${item.status})` }); return;
     }
     if (returnItems.find(r => r.key === key)) {
-      setMessage({ type: 'error', text: 'Item already in return list' });
-      return;
+      setMessage({ type: 'error', text: 'Item already in return list' }); return;
     }
-    setReturnItems([...returnItems, { key, item, disposition: null }]);
+    setReturnItems(prev => [...prev, { key, item, disposition: null }]);
     setItemBarcode('');
+    setMessage(null);
+  };
+
+  const addItemFromList = (key: string, item: UniformItem) => {
+    if (returnItems.find(r => r.key === key)) {
+      setMessage({ type: 'warning', text: 'Already added' }); return;
+    }
+    setReturnItems(prev => [...prev, { key, item, disposition: null }]);
     setMessage(null);
   };
 
@@ -545,62 +687,51 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
 
   const handleReturn = async () => {
     if (!allDispositioned) return;
-    setLoading(true);
-    setMessage(null);
+    setLoading(true); setMessage(null);
     try {
       const updates: Record<string, any> = {};
       const timestamp = new Date().toISOString();
       const targetStudioName = studioList.find(s => s.key === targetStudioKey)?.name || studioName;
-
       let hamperIncrement = 0;
 
       for (const { key: itemKey, item, disposition } of returnItems) {
         if (disposition === 'cleaner') {
-          // If laundry enabled → In Hamper; if disabled → directly Available
           const newStatus = laundryEnabled ? 'In Hamper' : 'Available';
           updates[`inventory/${cityKey}/${itemKey}/status`] = newStatus;
           updates[`inventory/${cityKey}/${itemKey}/returnedAt`] = timestamp;
           updates[`inventory/${cityKey}/${itemKey}/returnedAtStudio`] = targetStudioKey;
-          updates[`inventory/${cityKey}/${itemKey}/returnedBy`] = resolvedGP || CURRENT_USER;
-          updates[`inventory/${cityKey}/${itemKey}/studioLocation`] = targetStudioKey;
+          updates[`inventory/${cityKey}/${itemKey}/returnedBy`] = resolvedGP?.barcode || CURRENT_USER;
+          updates[`inventory/${cityKey}/${itemKey}/studioLocation`] = targetStudioName;
           if (laundryEnabled) {
             hamperIncrement++;
           } else {
-            // Clear issue tracking so item is fully clean
             updates[`inventory/${cityKey}/${itemKey}/issuedAt`] = null;
             updates[`inventory/${cityKey}/${itemKey}/issuedAtStudio`] = null;
             updates[`inventory/${cityKey}/${itemKey}/issuedBy`] = null;
           }
         } else {
-          // unwearable → Damaged
           updates[`inventory/${cityKey}/${itemKey}/status`] = 'Damaged';
           const damageKey = push(ref(db, `damages/${cityKey}`)).key;
           updates[`damages/${cityKey}/${damageKey}`] = {
-            itemBarcode: item.barcode,
-            itemName: item.name,
-            damageType: 'damaged',
-            reportedAt: timestamp,
-            notes: 'Returned as unwearable',
-            city: cityName,
-            studio: targetStudioName,
-            returnedBy: resolvedGP || CURRENT_USER,
+            itemBarcode: item.barcode, itemName: item.name, damageType: 'damaged',
+            reportedAt: timestamp, notes: 'Returned as unwearable',
+            city: cityName, studio: targetStudioName, returnedBy: resolvedGP?.barcode || CURRENT_USER,
           };
         }
 
         // Close active assignment
         const assignmentsSnapshot = await get(ref(db, `assignments/${cityKey}`));
-        const assignments = assignmentsSnapshot.val() || {};
-        for (const [aKey, a] of Object.entries(assignments) as [string, any][]) {
+        const cityAssignments = assignmentsSnapshot.val() || {};
+        for (const [aKey, a] of Object.entries(cityAssignments) as [string, any][]) {
           if (a.itemBarcode === item.barcode && a.status === 'active') {
             updates[`assignments/${cityKey}/${aKey}/returnedAt`] = timestamp;
             updates[`assignments/${cityKey}/${aKey}/returnedAtStudio`] = targetStudioKey;
-            updates[`assignments/${cityKey}/${aKey}/returnedBy`] = resolvedGP || CURRENT_USER;
+            updates[`assignments/${cityKey}/${aKey}/returnedBy`] = resolvedGP?.barcode || CURRENT_USER;
             updates[`assignments/${cityKey}/${aKey}/status`] = 'returned';
           }
         }
       }
 
-      // Increment hamper for cleaner items
       if (hamperIncrement > 0 && studios[targetStudioKey]) {
         const currentCount = studios[targetStudioKey].currentHamperCount || 0;
         updates[`cities/${cityKey}/studios/${targetStudioKey}/currentHamperCount`] = currentCount + hamperIncrement;
@@ -610,84 +741,133 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
       const cleanerItems = returnItems.filter(r => r.disposition === 'cleaner').map(r => r.item.barcode).join(', ');
       const damagedItems = returnItems.filter(r => r.disposition === 'unwearable').map(r => r.item.barcode).join(', ');
       updates[`logs/${cityKey}/${targetStudioKey}/${logKey}`] = {
-        date: timestamp,
-        action: 'RETURN',
-        details: `Return by ${resolvedGP || 'staff'} at ${targetStudioName}${cleanerItems ? ' | To cleaner: ' + cleanerItems : ''}${damagedItems ? ' | Damaged out: ' + damagedItems : ''}`,
+        date: timestamp, action: 'RETURN',
+        details: `Return by ${resolvedGP?.name || resolvedGP?.barcode || 'staff'} at ${targetStudioName}${cleanerItems ? ' | To cleaner: ' + cleanerItems : ''}${damagedItems ? ' | Damaged out: ' + damagedItems : ''}`,
       };
 
       await update(ref(db), updates);
       setMessage({ type: 'success', text: `✓ ${returnItems.length} item(s) returned` });
 
       setTimeout(() => {
-        setStep('gp');
-        setGpSearch('');
-        setResolvedGP('');
-        setReturnItems([]);
-        setItemBarcode('');
-        setMessage(null);
+        setStep('gp'); setGpSearch(''); setResolvedGP(null);
+        setReturnItems([]); setItemBarcode(''); setMessage(null);
         if (onRefresh) onRefresh();
       }, 2000);
     } catch (err) {
       console.error(err);
       setMessage({ type: 'error', text: 'Return failed. Please try again.' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
+
+  const stepIndex = ['gp', 'items', 'status'].indexOf(step);
 
   return (
     <div className="operation-content">
-      <StepIndicator steps={['Identify GP', 'Scan Items', 'Item Status']} current={['gp', 'items', 'status'].indexOf(step)} />
-
+      <StepIndicator steps={['Identify GP', 'Select Items', 'Item Status']} current={stepIndex} />
       {message && <div className={`alert alert-${message.type}`}>{message.text}</div>}
 
+      {/* STEP 1: IDENTIFY GP */}
       {step === 'gp' && (
         <div className="step-panel">
           <h3 className="step-title">Step 1 — Identify Returning GP</h3>
-          <p className="text-muted">Scan or enter the GP's ID card</p>
+          <p className="text-muted">Scan GP ID card or type their name</p>
 
           <BarcodeInput
-            label="GP ID Card"
-            placeholder="Scan or enter GP ID..."
+            label="GP ID Card or Name"
+            placeholder="Scan or type GP ID / name..."
             value={gpSearch}
-            onChange={setGpSearch}
+            onChange={v => { setGpSearch(v); setShowSuggestions(true); }}
             onSubmit={handleGPLookup}
             autoFocus
+            hint="USB barcode scanner will auto-submit"
           />
-          <div className="form-group">
-            <label className="field-label">Return to Studio Hamper</label>
+
+          {showSuggestions && gpSearch && filteredReturnGPs.length > 0 && (
+            <div className="gp-suggestions">
+              {filteredReturnGPs.map(gp => (
+                <button key={gp.key} className="gp-suggestion-item" onClick={() => selectGP(gp)}>
+                  <span className="gp-name">{gp.name}</span>
+                  <span className="gp-id">{gp.barcode}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="form-group" style={{ marginTop: '1rem' }}>
+            <label className="field-label">Return to Studio</label>
             <select value={targetStudioKey} onChange={e => setTargetStudioKey(e.target.value)} className="input-dark">
               {studioList.map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
             </select>
           </div>
-          <button onClick={handleGPLookup} disabled={!gpSearch.trim()} className="btn btn-gold">
+
+          <button onClick={handleGPLookup} disabled={!gpSearch.trim()} className="btn btn-gold" style={{ marginTop: '0.5rem' }}>
             Continue →
           </button>
         </div>
       )}
 
+      {/* STEP 2: SELECT ITEMS */}
       {step === 'items' && (
         <div className="step-panel">
           <div className="gp-confirmed-banner">
             <span className="gp-confirmed-label">Returning</span>
-            <strong>{resolvedGP}</strong>
-            <button className="btn-link" onClick={() => setStep('gp')}>Change</button>
+            <strong>{resolvedGP?.name}</strong>
+            {resolvedGP?.barcode && resolvedGP.barcode !== resolvedGP.name && (
+              <span className="gp-confirmed-id">{resolvedGP.barcode}</span>
+            )}
+            <button className="btn-link" onClick={() => { setStep('gp'); setResolvedGP(null); setGpSearch(''); setReturnItems([]); }}>Change</button>
           </div>
 
-          <h3 className="step-title">Step 2 — Scan Items Being Returned</h3>
+          <h3 className="step-title">Step 2 — Select Items Being Returned</h3>
 
-          <BarcodeInput
-            label="Item Barcode"
-            placeholder="Scan or enter item barcode..."
-            value={itemBarcode}
-            onChange={setItemBarcode}
-            onSubmit={handleAddReturnItem}
-            autoFocus
-          />
+          {/* Active items assigned to this GP */}
+          {gpActiveItems.length > 0 && (
+            <div className="gp-active-items">
+              <div className="gp-active-items-header">
+                <span>📋 Items currently issued to {resolvedGP?.name}</span>
+                <button className="btn-link" onClick={() => {
+                  gpActiveItems.forEach(({ key, item }) => {
+                    if (!returnItems.find(r => r.key === key)) {
+                      setReturnItems(prev => [...prev, { key, item, disposition: null }]);
+                    }
+                  });
+                }}>Add all</button>
+              </div>
+              {gpActiveItems.map(({ key, item }) => {
+                const alreadyAdded = !!returnItems.find(r => r.key === key);
+                return (
+                  <div key={key} className={`gp-active-item ${alreadyAdded ? 'added' : ''}`}>
+                    <span className="scanned-item-name">{item.name}</span>
+                    <span className="scanned-item-size">{item.size}</span>
+                    <code className="barcode small">{item.barcode}</code>
+                    <button
+                      className="btn btn-dark btn-sm"
+                      onClick={() => addItemFromList(key, item)}
+                      disabled={alreadyAdded}
+                    >
+                      {alreadyAdded ? '✓ Added' : '+ Return'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Manual barcode scan */}
+          <div style={{ marginTop: gpActiveItems.length > 0 ? '1rem' : '0' }}>
+            <BarcodeInput
+              label={gpActiveItems.length > 0 ? 'Or scan a barcode manually' : 'Item Barcode'}
+              placeholder="Scan or enter item barcode..."
+              value={itemBarcode}
+              onChange={setItemBarcode}
+              onSubmit={handleAddReturnItem}
+              autoFocus={gpActiveItems.length === 0}
+            />
+          </div>
 
           {returnItems.length > 0 && (
             <div className="scanned-items-list">
-              <div className="scanned-items-header">Scanned ({returnItems.length})</div>
+              <div className="scanned-items-header">Return list ({returnItems.length})</div>
               {returnItems.map(({ key, item }) => (
                 <div key={key} className="scanned-item">
                   <span className="scanned-item-name">{item.name}</span>
@@ -701,18 +881,18 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
 
           <div className="button-row">
             <button onClick={() => setStep('status')} disabled={returnItems.length === 0} className="btn btn-gold">
-              Next — Set Item Status →
+              Next — Set Item Condition →
             </button>
             <button onClick={() => setStep('gp')} className="btn btn-dark">← Back</button>
           </div>
         </div>
       )}
 
+      {/* STEP 3: ITEM STATUS */}
       {step === 'status' && (
         <div className="step-panel">
           <h3 className="step-title">Step 3 — Item Condition</h3>
           <p className="text-muted">For each item, choose what happens to it</p>
-
           <div className="disposition-list">
             {returnItems.map(({ key, item, disposition }) => (
               <div key={key} className="disposition-item">
@@ -737,7 +917,6 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
               </div>
             ))}
           </div>
-
           <div className="button-row">
             <button onClick={handleReturn} disabled={loading || !allDispositioned} className="btn btn-gold btn-lg">
               {loading ? 'Processing...' : `✓ Confirm Return (${returnItems.length} items)`}
@@ -750,18 +929,25 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
   );
 }
 
+
 // ─── LAUNDRY OPERATION ───────────────────────────────────────────────────────
 
-function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory, onRefresh }: OperationComponentProps) {
+function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory, studios = {}, onRefresh }: OperationComponentProps) {
   const [operation, setOperation] = useState<'pickup' | 'receive'>('pickup');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const availableItems = Object.entries(inventory).filter(([_, item]) => {
+  // Find the home studio for this city (marked with homeStudio: true in admin)
+  const homeStudioEntry = useMemo(() =>
+    Object.entries(studios).find(([, s]) => (s as any).homeStudio),
+  [studios]);
+  const homeStudioKey  = homeStudioEntry?.[0] ?? studioKey;
+  const homeStudioName = (homeStudioEntry?.[1] as any)?.name ?? studioName;
+  const hasHomeStudio  = !!homeStudioEntry;
+
+  const availableItems = Object.entries(inventory).filter(([, item]) => {
     if (operation === 'pickup') {
-      // studioLocation is stored as display name (e.g. "Ocean"), not key
-      // studioName prop is the display name, so compare against that
       return item.status === 'In Hamper' && (
         item.studioLocation?.trim().toLowerCase() === studioName?.trim().toLowerCase() ||
         item.studioLocation?.trim().toLowerCase() === studioKey?.trim().toLowerCase()
@@ -770,17 +956,14 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
     return item.status === 'At Laundry';
   });
 
-  const toggleItem = (key: string) => {
+  const toggleItem = (key: string) =>
     setSelectedItems(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
-  };
-
   const selectAll = () => setSelectedItems(availableItems.map(([k]) => k));
-  const clearAll = () => setSelectedItems([]);
+  const clearAll  = () => setSelectedItems([]);
 
   const handleSubmit = async () => {
     if (selectedItems.length === 0) return;
-    setLoading(true);
-    setMessage(null);
+    setLoading(true); setMessage(null);
     try {
       const updates: Record<string, any> = {};
       const timestamp = new Date().toISOString();
@@ -797,56 +980,67 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
         for (const k of selectedItems) {
           updates[`inventory/${cityKey}/${k}/status`] = 'At Laundry';
         }
-        // Decrement hamper
         const snap = await get(ref(db, `cities/${cityKey}/studios/${studioKey}/currentHamperCount`));
         const cnt = snap.val() || 0;
         updates[`cities/${cityKey}/studios/${studioKey}/currentHamperCount`] = Math.max(0, cnt - selectedItems.length);
-
         const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
         updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
           date: timestamp, action: 'LAUNDRY_PICKUP',
           details: `Pickup ${orderNumber}: ${selectedItems.length} item(s) from ${studioName}`,
         };
       } else {
+        // Return all items to home studio (or current studio if no home set)
         for (const k of selectedItems) {
           updates[`inventory/${cityKey}/${k}/status`] = 'Available';
-          updates[`inventory/${cityKey}/${k}/studioLocation`] = studioKey;
+          updates[`inventory/${cityKey}/${k}/studioLocation`] = homeStudioName;
           updates[`inventory/${cityKey}/${k}/issuedAt`] = null;
           updates[`inventory/${cityKey}/${k}/issuedAtStudio`] = null;
           updates[`inventory/${cityKey}/${k}/issuedBy`] = null;
           updates[`inventory/${cityKey}/${k}/returnedAt`] = null;
           updates[`inventory/${cityKey}/${k}/returnedAtStudio`] = null;
         }
-        const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
-        updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
+        const logKey = push(ref(db, `logs/${cityKey}/${homeStudioKey}`)).key;
+        updates[`logs/${cityKey}/${homeStudioKey}/${logKey}`] = {
           date: timestamp, action: 'LAUNDRY_RECEIVE',
-          details: `Received ${selectedItems.length} item(s) from laundry → Available at ${studioName}`,
+          details: `Received ${selectedItems.length} item(s) from laundry → Available at ${homeStudioName}${hasHomeStudio && homeStudioKey !== studioKey ? ' (home studio)' : ''}`,
         };
       }
 
       await update(ref(db), updates);
-      setMessage({ type: 'success', text: `✓ ${selectedItems.length} item(s) ${operation === 'pickup' ? 'sent to laundry' : 'received, now Available'}` });
+      const dest = operation === 'pickup' ? 'sent to laundry' : `received — now Available at ${homeStudioName}`;
+      setMessage({ type: 'success', text: `✓ ${selectedItems.length} item(s) ${dest}` });
       setSelectedItems([]);
       if (onRefresh) setTimeout(onRefresh, 500);
     } catch (err) {
       console.error(err);
       setMessage({ type: 'error', text: 'Failed to process. Please try again.' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
     <div className="operation-content">
       <h3 className="step-title">Laundry Operations</h3>
-
       {message && <div className={`alert alert-${message.type}`}>{message.text}</div>}
 
-      <div className="laundry-toggle">
-        <button className={`laundry-toggle-btn ${operation === 'pickup' ? 'active' : ''}`} onClick={() => { setOperation('pickup'); setSelectedItems([]); }}>
+      {operation === 'receive' && (
+        <div className="home-studio-notice">
+          {hasHomeStudio
+            ? `🏠 Items will return to home studio: ${homeStudioName}`
+            : `⚠️ No home studio set — items will return to ${studioName}. Set a home studio in Admin → Cities & Studios.`}
+        </div>
+      )}
+
+      <div className="laundry-toggle-row">
+        <button
+          className={`laundry-toggle-btn ${operation === 'pickup' ? 'active' : ''}`}
+          onClick={() => { setOperation('pickup'); setSelectedItems([]); }}
+        >
           <span>🧺</span> Hamper → At Laundry
         </button>
-        <button className={`laundry-toggle-btn ${operation === 'receive' ? 'active' : ''}`} onClick={() => { setOperation('receive'); setSelectedItems([]); }}>
+        <button
+          className={`laundry-toggle-btn ${operation === 'receive' ? 'active' : ''}`}
+          onClick={() => { setOperation('receive'); setSelectedItems([]); }}
+        >
           <span>✅</span> At Laundry → Available
         </button>
       </div>
@@ -871,7 +1065,11 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
           {availableItems.map(([key, item]) => (
             <label key={key} className="item-checkbox">
               <input type="checkbox" checked={selectedItems.includes(key)} onChange={() => toggleItem(key)} />
-              <span>{item.name} — {item.size} <code className="barcode small">{item.barcode}</code></span>
+              <span>{item.name} — {item.size} <code className="barcode small">{item.barcode}</code>
+                {operation === 'receive' && (
+                  <span className="item-return-dest"> → {homeStudioName}</span>
+                )}
+              </span>
             </label>
           ))}
         </div>
@@ -880,11 +1078,12 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
       <button onClick={handleSubmit} disabled={loading || selectedItems.length === 0} className="btn btn-gold">
         {loading ? 'Processing...' : operation === 'pickup'
           ? `Send ${selectedItems.length} to Laundry`
-          : `Mark ${selectedItems.length} as Available`}
+          : `Return ${selectedItems.length} to ${homeStudioName}`}
       </button>
     </div>
   );
 }
+
 
 // ─── DAMAGE OPERATION ─────────────────────────────────────────────────────────
 
@@ -906,8 +1105,7 @@ function DamageOperation({ cityKey, cityName, studioKey, studioName, inventory, 
   const handleMarkDamaged = async () => {
     if (!foundItem) return;
     const [itemKey, item] = foundItem;
-    setLoading(true);
-    setMessage(null);
+    setLoading(true); setMessage(null);
     try {
       const updates: Record<string, any> = {};
       const timestamp = new Date().toISOString();
@@ -933,15 +1131,12 @@ function DamageOperation({ cityKey, cityName, studioKey, studioName, inventory, 
     } catch (err) {
       console.error(err);
       setMessage({ type: 'error', text: 'Failed. Please try again.' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
     <div className="operation-content">
       <h3 className="step-title">Mark Item Damaged / Lost</h3>
-
       {message && <div className={`alert alert-${message.type}`}>{message.text}</div>}
 
       <div className="damage-type-toggle">
@@ -954,12 +1149,8 @@ function DamageOperation({ cityKey, cityName, studioKey, studioName, inventory, 
       </div>
 
       <BarcodeInput
-        label="Item Barcode"
-        placeholder="Scan or enter item barcode..."
-        value={barcode}
-        onChange={setBarcode}
-        onSubmit={handleLookup}
-        autoFocus
+        label="Item Barcode" placeholder="Scan or enter item barcode..."
+        value={barcode} onChange={setBarcode} onSubmit={handleLookup} autoFocus
       />
 
       {foundItem && (

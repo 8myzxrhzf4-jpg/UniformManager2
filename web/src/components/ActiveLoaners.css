@@ -29,11 +29,7 @@
   flex-wrap: wrap;
 }
 
-.sort-tabs {
-  display: flex;
-  gap: 0.25rem;
-  flex-shrink: 0;
-}
+.sort-tabs { display: flex; gap: 0.25rem; flex-shrink: 0; }
 
 .sort-tab {
   background: var(--color-bg-tertiary);
@@ -61,3 +57,123 @@
 
 .loaners-table { font-size: 0.875rem; }
 .loaners-table th { white-space: nowrap; }
+
+/* ── Return button ───────────────────────────────────────────────────── */
+.btn-return-loaner {
+  background: rgba(212,175,55,0.1);
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+  border-radius: var(--radius-md);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+.btn-return-loaner:hover {
+  background: rgba(212,175,55,0.22);
+}
+
+/* ── Return modal ────────────────────────────────────────────────────── */
+.loaner-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.loaner-modal {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.modal-title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.1rem;
+  color: var(--color-text-primary);
+}
+
+.modal-subtitle {
+  margin: 0 0 1.25rem 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.modal-item-card {
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.1rem;
+}
+
+.modal-item-name {
+  font-weight: 700;
+  color: var(--color-text-primary);
+  font-size: 1rem;
+  margin-bottom: 0.4rem;
+}
+
+.modal-barcode-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.modal-barcode-label {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.modal-item-meta {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.modal-question {
+  font-size: 0.9rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 1rem 0;
+}
+
+.modal-btn-row {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.modal-disposition-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* Reuse disposition-btn styles from Operations.css */
+.disposition-btn {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-fast);
+}
+.disposition-btn:hover { border-color: var(--color-accent); color: var(--color-text-primary); }
+.disposition-btn.selected-cleaner { border-color: var(--color-info, #3b82f6); background: rgba(59,130,246,0.1); color: var(--color-info, #3b82f6); }
+.disposition-btn.selected-damage  { border-color: var(--color-error); background: rgba(239,68,68,0.1); color: var(--color-error); }

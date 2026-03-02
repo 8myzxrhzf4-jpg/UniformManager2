@@ -8,10 +8,18 @@ interface SizeSuggestionProps {
   inventory: Record<string, UniformItem>;
 }
 
-// Get unique categories from inventory
+// Category = the item's name (e.g. "Shirt" groups all sizes together)
+function getItemCategory(item: UniformItem): string {
+  return item.name || (item as any).category || 'Other';
+}
+
+// Get unique categories (= unique item names) from inventory
 function getCategories(inventory: Record<string, UniformItem>): string[] {
   const cats = new Set<string>();
-  Object.values(inventory).forEach(item => { if (item.category) cats.add(item.category); });
+  Object.values(inventory).forEach(item => {
+    const cat = getItemCategory(item);
+    if (cat) cats.add(cat);
+  });
   return Array.from(cats).sort();
 }
 
@@ -71,12 +79,11 @@ export function SizeSuggestion({ gps, allAssignments, inventory }: SizeSuggestio
     }
 
     // Step 2: Build a "size profile" for the target GP
-    // Map: category → sizes they've been issued
+    // Map: category (= item name) → sizes they've been issued
     const gpSizeProfile: Record<string, Set<string>> = {};
     targetAssignments.forEach(a => {
-      // Find the item in inventory to get its category
       const item = Object.values(inventory).find(i => i.barcode === a.itemBarcode);
-      const cat = item?.category || '';
+      const cat = item ? getItemCategory(item) : (a.itemName || '');
       if (!cat) return;
       if (!gpSizeProfile[cat]) gpSizeProfile[cat] = new Set();
       gpSizeProfile[cat].add(a.itemSize);
@@ -85,7 +92,8 @@ export function SizeSuggestion({ gps, allAssignments, inventory }: SizeSuggestio
     // Check if they've already been issued this category
     const directMatch = targetAssignments.filter(a => {
       const item = Object.values(inventory).find(i => i.barcode === a.itemBarcode);
-      return item?.category === selectedCategory;
+      const cat = item ? getItemCategory(item) : (a.itemName || '');
+      return cat === selectedCategory;
     });
 
     if (directMatch.length > 0) {
@@ -118,16 +126,12 @@ export function SizeSuggestion({ gps, allAssignments, inventory }: SizeSuggestio
       Object.values(cityAssignments || {}).forEach(a => {
         if (a.gpName === selectedGP) return;
         const item = Object.values(inventory).find(i => i.barcode === a.itemBarcode);
-        if (!item?.category) return;
-
-        // Does this GP share a category with our target GP?
-        const sharedCat = targetCategories.find(cat => cat === item.category);
+        const itemCat = item ? getItemCategory(item) : (a.itemName || '');
+        if (!itemCat) return;
+        const sharedCat = targetCategories.find(cat => cat === itemCat);
         if (!sharedCat) return;
-
-        // Does the size match the target GP's size in that shared category?
         const targetSizes = gpSizeProfile[sharedCat];
         if (!targetSizes?.has(a.itemSize)) return;
-
         if (!similarGPScores[a.gpName]) {
           similarGPScores[a.gpName] = { score: 0, targetCatSizes: [] };
         }
@@ -143,7 +147,8 @@ export function SizeSuggestion({ gps, allAssignments, inventory }: SizeSuggestio
       Object.values(cityAssignments || {}).forEach(a => {
         if (!similarGPNames.includes(a.gpName)) return;
         const item = Object.values(inventory).find(i => i.barcode === a.itemBarcode);
-        if (item?.category !== selectedCategory) return;
+        const itemCat = item ? getItemCategory(item) : (a.itemName || '');
+        if (itemCat !== selectedCategory) return;
         const weight = similarGPScores[a.gpName]?.score || 1;
         catSizeVotes[a.itemSize] = (catSizeVotes[a.itemSize] || 0) + weight;
       });

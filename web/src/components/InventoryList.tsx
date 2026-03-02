@@ -3,7 +3,7 @@
   Add a short delayed fallback to initialize from window.__lastFetchedInventory
   so timing/HMR won't leave the Inventory empty.
 */
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fetchInventoryForCity } from '../services/inventoryService';
 import type { UniformItem } from '../types';
 import { getSelectedCityKey, getSelectedStudio } from '../state/citySelector';

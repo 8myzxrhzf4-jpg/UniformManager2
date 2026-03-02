@@ -97,7 +97,7 @@ export function HamperManagement({
               setNewCapacity(hamperCapacity.toString());
               setMessage(null);
             }}
-            className="btn-outline btn-sm"
+            className="btn btn-dark btn-sm"
           >
             Edit Capacity
           </button>

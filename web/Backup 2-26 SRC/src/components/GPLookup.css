@@ -1,0 +1,115 @@
+.gp-lookup h2 { margin: 0 0 0.25rem 0; }
+
+.gp-search-row { display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-sm); }
+
+.gp-search-input { flex: 1; }
+
+.gp-suggestion-list {
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: var(--spacing-md);
+}
+
+.gp-suggestion-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 0.625rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  color: var(--color-text-primary);
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.gp-suggestion-row:last-child { border-bottom: none; }
+.gp-suggestion-row:hover { background: var(--color-bg-card); }
+
+.gp-sug-name { font-weight: 600; font-size: 0.9rem; }
+.gp-sug-meta { display: flex; gap: 0.75rem; align-items: center; font-size: 0.8rem; color: var(--color-text-muted); }
+
+/* GP Detail */
+.gp-detail {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--spacing-lg);
+  margin-top: var(--spacing-md);
+}
+
+.gp-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-lg);
+}
+
+.gp-detail-header h3 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.1rem;
+  color: var(--color-text-primary);
+}
+
+.gp-stats {
+  display: flex;
+  gap: var(--spacing-lg);
+}
+
+.gp-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.gp-stat-num {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.gp-stat-label {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* Filter tabs */
+.gp-filter-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: var(--spacing-md);
+}
+
+.gp-filter-tab {
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.gp-filter-tab.active {
+  background: rgba(212,175,55,0.12);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.assignment-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.assignment-table { font-size: 0.875rem; }
+
+.barcode.small {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.35rem;
+}
