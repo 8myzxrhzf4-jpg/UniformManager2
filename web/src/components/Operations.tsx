@@ -73,7 +73,7 @@ export function Operations({
         )}
         {activeTab === 'laundry' && laundryEnabled && (
           <LaundryOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey}
-            studioName={studioName} inventory={inventory} studios={studios} onRefresh={onRefresh} />
+            studioName={studioName} inventory={inventory} studios={studios} onRefresh={onRefresh} currentUser={currentUser} />
         )}
         {activeTab === 'damage' && (
           <DamageOperation cityKey={cityKey} cityName={cityName} studioKey={studioKey}
@@ -932,7 +932,7 @@ function ReturnOperation({ cityKey, cityName, studioKey, studioName, inventory, 
 
 // ─── LAUNDRY OPERATION ───────────────────────────────────────────────────────
 
-function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory, studios = {}, onRefresh }: OperationComponentProps) {
+function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory, studios = {}, onRefresh, currentUser }: OperationComponentProps) {
   const [operation, setOperation] = useState<'pickup' | 'receive'>('pickup');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -974,6 +974,7 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
         updates[`laundry_orders/${cityKey}/${orderKey}`] = {
           orderNumber, items: selectedItems.map(k => inventory[k].barcode),
           createdAt: timestamp, pickedUpAt: timestamp,
+          createdBy: currentUser || 'Unknown User',
           status: 'picked_up', city: cityName, studio: studioName,
           itemCount: selectedItems.length,
         };
@@ -986,6 +987,7 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
         const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
         updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
           date: timestamp, action: 'LAUNDRY_PICKUP',
+          user: currentUser || 'Unknown User',
           details: `Pickup ${orderNumber}: ${selectedItems.length} item(s) from ${studioName}`,
         };
       } else {
@@ -1002,6 +1004,7 @@ function LaundryOperation({ cityKey, cityName, studioKey, studioName, inventory,
         const logKey = push(ref(db, `logs/${cityKey}/${homeStudioKey}`)).key;
         updates[`logs/${cityKey}/${homeStudioKey}/${logKey}`] = {
           date: timestamp, action: 'LAUNDRY_RECEIVE',
+          user: currentUser || 'Unknown User',
           details: `Received ${selectedItems.length} item(s) from laundry → Available at ${homeStudioName}${hasHomeStudio && homeStudioKey !== studioKey ? ' (home studio)' : ''}`,
         };
       }

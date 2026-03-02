@@ -34,6 +34,13 @@ function toDateInput(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
+function getISOWeek(d: Date): number {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
 // ─── CSV HELPERS ──────────────────────────────────────────────────────────────
 
 function downloadCSV(filename: string, rows: string[][]): void {
@@ -317,6 +324,11 @@ function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, la
   const [dateTo, setDateTo] = useState(today); // default end = today
   const [statusFilter, setStatusFilter] = useState('all');
   const [logLoading, setLogLoading] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditYear, setAuditYear] = useState('');
+  const [auditWeek, setAuditWeek] = useState('');
+  const [auditOptions, setAuditOptions] = useState<{ year: string; week: string; label: string }[]>([]);
+  const [auditOptionsLoaded, setAuditOptionsLoaded] = useState(false);
 
   const dateSuffix = `${cityName}_${studioName}_${today}`;
 
@@ -441,6 +453,103 @@ function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, la
     }
   };
 
+  const loadAuditOptions = async () => {
+    if (auditOptionsLoaded) return;
+    try {
+      const snap = await get(ref(db, `audit_sessions/${cityKey}`));
+      const cityData = snap.val() || {};
+      const optMap = new Map<string, string>();
+      for (const studioSessions of Object.values(cityData)) {
+        if (typeof studioSessions !== 'object' || !studioSessions) continue;
+        for (const session of Object.values(studioSessions as Record<string, any>)) {
+          if (!session?.completedAt) continue;
+          const d = new Date(session.completedAt);
+          const year = String(d.getFullYear());
+          const week = String(getISOWeek(d)).padStart(2, '0');
+          const key = `${year}-W${week}`;
+          if (!optMap.has(key)) {
+            optMap.set(key, `${year} — Week ${week}`);
+          }
+        }
+      }
+      const opts = Array.from(optMap.entries())
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([key, label]) => {
+          const [year, weekPart] = key.split('-W');
+          return { year, week: weekPart, label };
+        });
+      setAuditOptions(opts);
+      if (opts.length > 0 && !auditYear) {
+        setAuditYear(opts[0].year);
+        setAuditWeek(opts[0].week);
+      }
+    } catch (err) {
+      console.error('Failed to load audit options', err);
+    }
+    setAuditOptionsLoaded(true);
+  };
+
+  const exportAuditResults = async () => {
+    if (!auditYear || !auditWeek) return;
+    setAuditLoading(true);
+    try {
+      const snap = await get(ref(db, `audit_sessions/${cityKey}`));
+      const cityData = snap.val() || {};
+      const rows: string[][] = [
+        ['Completed At', 'Week', 'Studio', 'Audited By', 'Category', 'Size', 'Expected', 'Found', 'Missing', 'Unexpected', 'Variance %', 'Risk Score', 'Reasons',
+          'Found / Accounted For', 'Uniform Holding (Missing)', 'Laundry', 'Damaged / Lost'],
+      ];
+      for (const [sk, studioSessions] of Object.entries(cityData)) {
+        if (typeof studioSessions !== 'object' || !studioSessions) continue;
+        for (const session of Object.values(studioSessions as Record<string, any>)) {
+          if (!session?.completedAt) continue;
+          const d = new Date(session.completedAt);
+          const sYear = String(d.getFullYear());
+          const sWeek = String(getISOWeek(d)).padStart(2, '0');
+          if (sYear !== auditYear || sWeek !== auditWeek) continue;
+          const shrinkMap: Record<string, number> = {};
+          if (Array.isArray(session.shrinkageData)) {
+            for (const sl of session.shrinkageData) {
+              if (sl && typeof sl.label === 'string' && typeof sl.count === 'number') {
+                shrinkMap[sl.label] = sl.count;
+              }
+            }
+          }
+          const shrinkRow = [
+            String(shrinkMap['Found / Accounted For'] ?? ''),
+            String(shrinkMap['Uniform Holding (Missing)'] ?? ''),
+            String(shrinkMap['Laundry'] ?? ''),
+            String(shrinkMap['Damaged / Lost'] ?? ''),
+          ];
+          if (Array.isArray(session.results) && session.results.length > 0) {
+            for (const r of session.results) {
+              rows.push([
+                session.completedAt, session.week || '', session.studio || sk,
+                session.auditedBy || '',
+                r.category || '', r.size || '',
+                String(r.expected ?? ''), String(r.found ?? ''), String(r.missing ?? ''), String(r.unexpected ?? ''),
+                String(r.variancePct ?? ''), String(r.score ?? ''), (r.reasons || []).join(' + '),
+                ...shrinkRow,
+              ]);
+            }
+          } else {
+            rows.push([
+              session.completedAt, session.week || '', session.studio || sk,
+              session.auditedBy || '',
+              '', '', '', '', '', '', '', '', '',
+              ...shrinkRow,
+            ]);
+          }
+        }
+      }
+      downloadCSV(`audit_results_${cityName}_${auditYear}_W${auditWeek}.csv`, rows);
+    } catch (err) {
+      console.error('Audit export failed', err);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
   const exportCards = [
     {
       icon: '📦', title: 'Inventory', desc: 'All items with status, barcode, and tracking fields',
@@ -469,6 +578,39 @@ function ExportPanel({ cityKey, cityName, studioName, inventory, assignments, la
     {
       icon: '📜', title: 'Activity Log', desc: 'All system events across all studios in this city',
       action: exportLogs, loading: logLoading,
+    },
+    {
+      icon: '🔍', title: 'Audit Results', desc: 'Historical CAO audit results with shrinkage breakdown',
+      action: exportAuditResults, loading: auditLoading,
+      extra: (
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginTop: '0.25rem' }}
+          onClick={e => e.stopPropagation()}
+          onMouseEnter={loadAuditOptions}
+        >
+          <select
+            value={auditYear}
+            onChange={e => { setAuditYear(e.target.value); setAuditWeek(''); }}
+            className="input-dark input-sm"
+            style={{ minWidth: '80px' }}
+          >
+            {!auditOptionsLoaded && <option value="">Year…</option>}
+            {Array.from(new Set(auditOptions.map(o => o.year))).map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+          <select
+            value={auditWeek}
+            onChange={e => setAuditWeek(e.target.value)}
+            className="input-dark input-sm"
+            style={{ minWidth: '100px' }}
+          >
+            {!auditYear && <option value="">Week…</option>}
+            {auditOptions.filter(o => o.year === auditYear).map(o => (
+              <option key={o.week} value={o.week}>Week {o.week}</option>
+            ))}
+          </select>
+        </div>
+      ),
     },
   ];
 

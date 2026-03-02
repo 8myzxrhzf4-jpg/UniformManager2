@@ -12,9 +12,10 @@ interface AnalyticsProps {
   studioName: string;
   inventory: Record<string, UniformItem>;
   assignments: Record<string, Assignment>;
+  currentUser?: string;
 }
 
-export function Analytics({ cityKey, cityName, studioKey, studioName, inventory, assignments }: AnalyticsProps) {
+export function Analytics({ cityKey, cityName, studioKey, studioName, inventory, assignments, currentUser }: AnalyticsProps) {
   const [activeTab, setActiveTab] = useState<'gp-report' | 'demand' | 'lifespan' | 'audit'>('gp-report');
 
   return (
@@ -81,6 +82,7 @@ export function Analytics({ cityKey, cityName, studioKey, studioName, inventory,
             studioName={studioName}
             inventory={inventory}
             assignments={assignments}
+            currentUser={currentUser}
           />
         )}
       </div>
@@ -666,7 +668,7 @@ function getWeekString(): string {
   return `Week of ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
-function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, assignments }: AnalyticsComponentProps & { inventory: Record<string, UniformItem>; cityName: string }) {
+function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, assignments, currentUser }: AnalyticsComponentProps & { inventory: Record<string, UniformItem>; cityName: string; currentUser?: string }) {
   const [stage, setStage] = useState<'generate' | 'scanning' | 'results'>('generate');
   const [scopes, setScopes] = useState<AuditScope[]>([]);
   const [scopeIndex, setScopeIndex] = useState(0);
@@ -677,6 +679,7 @@ function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, ass
   const [saving, setSaving] = useState(false);
   const [pastSessions, setPastSessions] = useState<any[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const [showPastAudits, setShowPastAudits] = useState(false);
   const scanInputRef = useRef<HTMLInputElement>(null);
   const currentWeek = getWeekString();
 
@@ -739,8 +742,8 @@ function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, ass
     ];
   }, [stage, completedResults, inventory, studioName, studioKey]);
 
-  const loadPastSessions = async () => {
-    if (sessionsLoaded) return;
+  const loadPastSessions = async (force = false) => {
+    if (sessionsLoaded && !force) return;
     try {
       const snap = await get(ref(db, `audit_sessions/${cityKey}/${studioKey}`));
       const data = snap.val() || {};
@@ -913,6 +916,8 @@ function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, ass
       updates[`audit_sessions/${cityKey}/${studioKey}/${sessionKey}`] = {
         week: currentWeek, studio: studioName, studioKey, city: cityName, cityKey,
         completedAt: ts,
+        auditedBy: currentUser || 'Unknown User',
+        shrinkageData: shrinkageSlices.map(s => ({ label: s.label, count: s.count, pct: parseFloat(((s.count / Math.max(shrinkageSlices.reduce((a, b) => a + b.count, 0), 1)) * 100).toFixed(1)) })),
         generatedScopes: completedResults.map(r => ({
           name: r.name, size: r.size, expectedBarcodes: r.expectedBarcodes,
         })),
@@ -929,9 +934,11 @@ function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, ass
       const logKey = push(ref(db, `logs/${cityKey}/${studioKey}`)).key;
       updates[`logs/${cityKey}/${studioKey}/${logKey}`] = {
         date: ts, action: 'CAO_AUDIT',
+        user: currentUser || 'Unknown User',
         details: `CAO Audit ${currentWeek} — ${studioName}: ${completedResults.length} scope(s). Missing: ${completedResults.reduce((s, r) => s + r.missing, 0)}, Unexpected: ${completedResults.reduce((s, r) => s + r.unexpected, 0)}.`,
       };
       await update(ref(db), updates);
+      setSessionsLoaded(false);
       setMessage({ type: 'success', text: '✓ Audit saved.' });
     } catch { setMessage({ type: 'error', text: 'Failed to save audit.' }); }
     finally { setSaving(false); }
@@ -992,6 +999,57 @@ function UnifiedAudit({ cityKey, cityName, studioKey, studioName, inventory, ass
             ⚡ Generate This Week's Audit
           </button>
           <div className="cao-week-label">Current week: <strong>{currentWeek}</strong> &nbsp;·&nbsp; Studio: <strong>{studioName}</strong></div>
+
+          <div style={{ marginTop: '1.5rem' }}>
+            <button
+              className="btn btn-dark"
+              onClick={async () => {
+                await loadPastSessions(true);
+                setShowPastAudits(v => !v);
+              }}
+            >
+              {showPastAudits ? '▲ Hide Past Audits' : '📋 View Past Audits'}
+            </button>
+
+            {showPastAudits && (
+              <div className="cao-past-audits" style={{ marginTop: '1rem' }}>
+                {pastSessions.length === 0 ? (
+                  <p className="text-muted">No past audits found for this studio.</p>
+                ) : (
+                  [...pastSessions]
+                    .filter((s: any) => s.completedAt)
+                    .sort((a: any, b: any) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime())
+                    .map((session: any, idx: number) => (
+                      <div key={idx} className="cao-past-session card" style={{ marginBottom: '1rem', padding: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                          <strong>{session.week || 'Audit'}</strong>
+                          <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                            {new Date(session.completedAt).toLocaleString()} · {session.auditedBy || 'Unknown User'}
+                          </span>
+                        </div>
+                        {session.results && (
+                          <div style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>
+                            {session.results.length} scope(s) · Missing: {session.results.reduce((s: number, r: any) => s + (r.missing || 0), 0)} · Unexpected: {session.results.reduce((s: number, r: any) => s + (r.unexpected || 0), 0)}
+                          </div>
+                        )}
+                        {session.shrinkageData && session.shrinkageData.length > 0 && (
+                          <ShrinkagePieChart
+                            slices={session.shrinkageData.map((s: any) => ({
+                              label: s.label,
+                              count: s.count,
+                              color: s.label === 'Found / Accounted For' ? 'var(--color-success)'
+                                : s.label === 'Uniform Holding (Missing)' ? 'var(--color-warning)'
+                                : s.label === 'Laundry' ? '#4a9eff'
+                                : 'var(--color-error)',
+                            }))}
+                          />
+                        )}
+                      </div>
+                    ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
