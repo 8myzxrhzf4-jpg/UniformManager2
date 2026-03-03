@@ -425,7 +425,7 @@
   align-items: center;
   gap: 0.3rem;
   font-size: 0.82rem;
-  color: var(--color-text-primary);
+  color: #f8f8f8;
   cursor: pointer;
   padding: 0.2rem 0.55rem;
   border-radius: var(--radius-sm);
@@ -438,6 +438,10 @@
   border-color: var(--color-accent);
 }
 
+.city-check span {
+  color: inherit;
+}
+
 .city-check:focus-within {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
@@ -445,7 +449,7 @@
 
 .city-check:has(input:checked) {
   border-color: var(--color-accent);
-  color: var(--color-accent);
+  color: #f8f8f8;
   background: rgba(212, 175, 55, 0.15);
 }
 
@@ -456,6 +460,11 @@
 
 .user-edit-form .field-hint {
   color: var(--color-text-secondary);
+}
+
+/* Helper text above city chips */
+.user-edit-form .city-section h4 {
+  color: #f8f8f8;
 }
 
 /* ─── CITY STUDIO MANAGER ──────────────────────────────────────────────────── */
