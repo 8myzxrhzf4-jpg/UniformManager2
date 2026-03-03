@@ -148,3 +148,6 @@
   margin: 0.25rem 0 0;
   font-size: 0.78rem;
 }
+
+.size-suggestion .field-label { color: #f8f8f8; }
+.size-suggestion .text-muted { color: #f8f8f8; }
